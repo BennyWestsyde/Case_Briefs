@@ -4,11 +4,13 @@
 \RequirePackage{xparse}
 \RequirePackage{pgfkeys}
 \RequirePackage{fancyhdr}
-\RequirePackage{hyperref}
 \RequirePackage{geometry}
 \RequirePackage{titlesec}
 \RequirePackage{etoolbox}
 \RequirePackage{listofitems}
+\RequirePackage{hyperref}
+\RequirePackage{makeidx}
+\makeindex
 
 % Page layout
 \geometry{margin=1in}
@@ -27,15 +29,13 @@
 	/brief/procedure/.initial = ,
 	/brief/issue/.initial = ,
 	/brief/holding/.initial = ,
+    /brief/principal/.initial = ,
 	/brief/reasoning/.initial = ,
 	/brief/opinions/.initial = ,
 	/brief/label/.initial = ,
 }
 
 
-\RequirePackage{listofitems}
-\RequirePackage{makeidx}
-\makeindex
 
 \newcommand{\indexsubjects}[1]{%
 		\edef\unwrapped{\unexpanded\expandafter{\romannumeral-`0#1}}%
@@ -56,6 +56,9 @@
 	\closein\casefile
 }
 
+\newcommand{\CaseRef}[1]{
+    \hyperref[case:#1]{\textit{#1}}
+}
 
 
 
@@ -64,7 +67,6 @@
 
 	% Start each brief on a new page
 	\newpage
-	\pagestyle{fancy}
 	\pgfkeys{/brief, #1}
 
 	% Safely extract values
@@ -72,7 +74,15 @@
 	\edef\currentplaintiff{\unexpanded\expandafter{\pgfkeysvalueof{/brief/plaintiff}}}
 	\edef\currentdefendant{\unexpanded\expandafter{\pgfkeysvalueof{/brief/defendant}}}
 	\edef\currentcitation{\unexpanded\expandafter{\pgfkeysvalueof{/brief/citation}}}
+    \edef\currentfacts{\unexpanded\expandafter{\pgfkeysvalueof{/brief/facts}}}
+    \edef\currentprocedure{\unexpanded\expandafter{\pgfkeysvalueof{/brief/procedure}}}
+    \edef\currentissue{\unexpanded\expandafter{\pgfkeysvalueof{/brief/issue}}}
+    \edef\currentholding{\unexpanded\expandafter{\pgfkeysvalueof{/brief/holding}}}
+    \edef\currentprincipal{\unexpanded\expandafter{\pgfkeysvalueof{/brief/principal}}}
+    \edef\currentreasoning{\unexpanded\expandafter{\pgfkeysvalueof{/brief/reasoning}}}
+    \edef\currentopinions{\unexpanded\expandafter{\pgfkeysvalueof{/brief/opinions}}}
     \edef\currentlabel{\unexpanded\expandafter{\pgfkeysvalueof{/brief/label}}}
+
 
 	% PDF metadata
 	\hypersetup{
@@ -83,9 +93,13 @@
 
 	
 		% Header and footer
-	\fancyhead[L]{\currentcitation}
-	\fancyhead[R]{\currentsubject}
-	\fancyfoot[C]{\thepage}
+        \fancyhf{}
+        \fancyhead[L]{\currentcitation}
+        \fancyhead[R]{\currentsubject}
+        \fancyfoot[C]{\thepage}
+        \thispagestyle{fancy}
+
+
 
 	\addcontentsline{toc}{section}{\hyperref[\currentlabel]{\currentplaintiff\ v.\ \currentdefendant}} % Add to TOC
 
@@ -93,7 +107,7 @@
 	% Optional label for referencing
 	\pgfkeysifdefined{/brief/label}{%
 	\phantomsection % create a link anchor here
-		\label{\pgfkeysvalueof{/brief/label}}%
+		\label{\currentlabel}%
 	}{}
 
 	% Title block
@@ -116,20 +130,44 @@
 	}
 
 	\section*{Facts}
-	\pgfkeysvalueof{/brief/facts}
+    \ifblank{\currentfacts}{%
+        \textit{No facts provided.}
+    }{
+        \currentfacts
+    }
 
 	\section*{Procedural History}
-	\pgfkeysvalueof{/brief/procedure}
+    \ifblank{\currentprocedure}{%
+        \textit{No procedural history provided.}
+    }{
+        \currentprocedure
+    }
 
 	\section*{Issue}
-	\pgfkeysvalueof{/brief/issue}
+    \ifblank{\currentissue}{%
+        \textit{No issue provided.}
+    }{
+    	\currentissue
+    }
 
-	\section*{Holding}
-	\pgfkeysvalueof{/brief/holding}
+	\section*{Holding: \currentholding}
+    \ifblank{\currentprincipal}{%
+    }{
+        \subsection*{Principal}
+        \currentprincipal
+    }
 
 	\section*{Reasoning}
-	\pgfkeysvalueof{/brief/reasoning}
+    \ifblank{\currentreasoning}{%
+        \textit{No reasoning provided.}
+    }{
+        \currentreasoning
+    }
 
 	\section*{Separate Opinions}
-	\pgfkeysvalueof{/brief/opinions}
+    \ifblank{\currentopinions}{%
+        \textit{No separate opinions provided.}
+    }{
+        \currentopinions
+    }
 }
