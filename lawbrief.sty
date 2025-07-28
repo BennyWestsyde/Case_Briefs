@@ -17,19 +17,19 @@
 
 % Declare brief keys
 \pgfkeys{
-  /brief/.is family,
-  /brief/.unknown/.code = {},
-  /brief/subject/.initial = ,
-  /brief/plaintiff/.initial = ,
-  /brief/defendant/.initial = ,
-  /brief/citation/.initial = ,
-  /brief/facts/.initial = ,
-  /brief/procedure/.initial = ,
-  /brief/issue/.initial = ,
-  /brief/holding/.initial = ,
-  /brief/reasoning/.initial = ,
-  /brief/opinions/.initial = ,
-  /brief/label/.initial = ,
+	/brief/.is family,
+	/brief/.unknown/.code = {},
+	/brief/subject/.initial = ,
+	/brief/plaintiff/.initial = ,
+	/brief/defendant/.initial = ,
+	/brief/citation/.initial = ,
+	/brief/facts/.initial = ,
+	/brief/procedure/.initial = ,
+	/brief/issue/.initial = ,
+	/brief/holding/.initial = ,
+	/brief/reasoning/.initial = ,
+	/brief/opinions/.initial = ,
+	/brief/label/.initial = ,
 }
 
 
@@ -38,22 +38,22 @@
 \makeindex
 
 \newcommand{\indexsubjects}[1]{%
-    \edef\unwrapped{\unexpanded\expandafter{\romannumeral-`0#1}}%
-    \readlist*\subjectlist{\unwrapped}%
-    \foreachitem\z\in\subjectlist[]{\index{\z}}%
+		\edef\unwrapped{\unexpanded\expandafter{\romannumeral-`0#1}}%
+		\readlist*\subjectlist{\unwrapped}%
+		\foreachitem\z\in\subjectlist[]{\index{\z}}%
 }
 
 
 \newcommand{\includecases}{
-  \immediate\write18{find ./Cases -name "*.tex" | sort > casefiles.txt}
-  \newread\casefile
-  \openin\casefile=casefiles.txt
-  \loop
-    \read\casefile to \filename
-    \unless\ifeof\casefile
-      \IfFileExists{\filename}{\subfile{\filename}}{}
-  \repeat
-  \closein\casefile
+	\immediate\write18{find ./Cases -name "*.tex" | sort > casefiles.txt}
+	\newread\casefile
+	\openin\casefile=casefiles.txt
+	\loop
+		\read\casefile to \filename
+		\unless\ifeof\casefile
+			\IfFileExists{\filename}{\subfile{\filename}}{}
+	\repeat
+	\closein\casefile
 }
 
 
@@ -61,73 +61,75 @@
 
 % Main command
 \NewDocumentCommand{\NewBrief}{m}{
-  \pgfkeys{/brief, #1}
 
-  % Safely extract values
-  \edef\currentsubject{\unexpanded\expandafter{\pgfkeysvalueof{/brief/subject}}}
-  \edef\currentplaintiff{\unexpanded\expandafter{\pgfkeysvalueof{/brief/plaintiff}}}
-  \edef\currentdefendant{\unexpanded\expandafter{\pgfkeysvalueof{/brief/defendant}}}
-  \edef\currentcitation{\unexpanded\expandafter{\pgfkeysvalueof{/brief/citation}}}
+	% Start each brief on a new page
+	\newpage
+	\pagestyle{fancy}
+	\pgfkeys{/brief, #1}
 
-  % PDF metadata
-  \hypersetup{
-    pdftitle={\currentplaintiff\ v.\ \currentdefendant},
-    pdfsubject={\currentsubject},
-    pdfkeywords={\currentsubject}
-  }
+	% Safely extract values
+	\edef\currentsubject{\unexpanded\expandafter{\pgfkeysvalueof{/brief/subject}}}
+	\edef\currentplaintiff{\unexpanded\expandafter{\pgfkeysvalueof{/brief/plaintiff}}}
+	\edef\currentdefendant{\unexpanded\expandafter{\pgfkeysvalueof{/brief/defendant}}}
+	\edef\currentcitation{\unexpanded\expandafter{\pgfkeysvalueof{/brief/citation}}}
+    \edef\currentlabel{\unexpanded\expandafter{\pgfkeysvalueof{/brief/label}}}
 
-  
+	% PDF metadata
+	\hypersetup{
+		pdftitle={\currentplaintiff\ v.\ \currentdefendant},
+		pdfsubject={\currentsubject},
+		pdfkeywords={\currentsubject}
+	}
 
-  % Start each brief on a new page
-  \newpage
-  \pagestyle{fancy}
-  \fancyhead[L]{\currentcitation}
-  \fancyhead[R]{\currentsubject}
-  \fancyfoot[C]{\thepage}
+	
+		% Header and footer
+	\fancyhead[L]{\currentcitation}
+	\fancyhead[R]{\currentsubject}
+	\fancyfoot[C]{\thepage}
 
-  \addcontentsline{toc}{section}{\currentplaintiff\ v.\ \currentdefendant}
+	\addcontentsline{toc}{section}{\hyperref[\currentlabel]{\currentplaintiff\ v.\ \currentdefendant}} % Add to TOC
 
 
-  % Optional label for referencing
-  \pgfkeysifdefined{/brief/label}{%
-  \phantomsection % create a link anchor here
-    \label{\pgfkeysvalueof{/brief/label}}%
-  }{}
+	% Optional label for referencing
+	\pgfkeysifdefined{/brief/label}{%
+	\phantomsection % create a link anchor here
+		\label{\pgfkeysvalueof{/brief/label}}%
+	}{}
 
-  % Title block
-  \begin{center}
-    \begin{Huge}
-      \currentplaintiff\ v.\ \currentdefendant
-    \end{Huge}\\
-    \begin{large}
-      \currentcitation
-    \end{large}
-  \end{center}
+	% Title block
+	\begin{center}
+		\begin{Huge}
+			\currentplaintiff\ v.\ \currentdefendant
+		\end{Huge}\\
+		\begin{large}
+			\currentcitation
+		\end{large}
+	\end{center}
 
-  % Display subject
-  \section*{Keyword Subject}
-  \ifblank{\currentsubject}{%
-      \textit{No subject specified.}
-  }{
-      \currentsubject
-      \indexsubjects{\currentsubject}
-  }
+	% Display subject
+	\section*{Keyword Subject}
+	\ifblank{\currentsubject}{%
+			\textit{No subject specified.}
+	}{
+			\currentsubject
+			\indexsubjects{\currentsubject}
+	}
 
-  \section*{Facts}
-  \pgfkeysvalueof{/brief/facts}
+	\section*{Facts}
+	\pgfkeysvalueof{/brief/facts}
 
-  \section*{Procedural History}
-  \pgfkeysvalueof{/brief/procedure}
+	\section*{Procedural History}
+	\pgfkeysvalueof{/brief/procedure}
 
-  \section*{Issue}
-  \pgfkeysvalueof{/brief/issue}
+	\section*{Issue}
+	\pgfkeysvalueof{/brief/issue}
 
-  \section*{Holding}
-  \pgfkeysvalueof{/brief/holding}
+	\section*{Holding}
+	\pgfkeysvalueof{/brief/holding}
 
-  \section*{Reasoning}
-  \pgfkeysvalueof{/brief/reasoning}
+	\section*{Reasoning}
+	\pgfkeysvalueof{/brief/reasoning}
 
-  \section*{Separate Opinions}
-  \pgfkeysvalueof{/brief/opinions}
+	\section*{Separate Opinions}
+	\pgfkeysvalueof{/brief/opinions}
 }
