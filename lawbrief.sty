@@ -1,5 +1,5 @@
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{lawbrief}[2025/07/22 Law School Case Briefs - No Glossary]
+\ProvidesPackage{lawbrief}[2025/07/22 Law School Case Briefs]
 
 \RequirePackage{xparse}
 \RequirePackage{pgfkeys}
@@ -13,6 +13,7 @@
 % Page layout
 \geometry{margin=1in}
 \setlength{\parindent}{0pt}
+
 
 % Declare brief keys
 \pgfkeys{
@@ -72,6 +73,9 @@
   \fancyhead[L]{\currentcitation}
   \fancyhead[R]{\currentsubject}
   \fancyfoot[C]{\thepage}
+
+  \addcontentsline{toc}{section}{\currentplaintiff\ v.\ \currentdefendant}
+
 
   % Optional label for referencing
   \pgfkeysifdefined{/brief/label}{%
