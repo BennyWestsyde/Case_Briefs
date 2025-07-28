@@ -44,6 +44,17 @@
 }
 
 
+\newcommand{\includecases}{
+  \immediate\write18{find ./Cases -name "*.tex" | sort > casefiles.txt}
+  \newread\casefile
+  \openin\casefile=casefiles.txt
+  \loop
+    \read\casefile to \filename
+    \unless\ifeof\casefile
+      \IfFileExists{\filename}{\subfile{\filename}}{}
+  \repeat
+  \closein\casefile
+}
 
 
 

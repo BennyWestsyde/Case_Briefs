@@ -1,0 +1,2 @@
+./Cases/Brown_V_Board_of_Education.tex
+./Cases/Plessy_V_Ferguson.tex
