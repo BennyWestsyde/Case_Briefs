@@ -9,3 +9,5 @@
 /*.out
 /*.synctex.gz
 /*.toc
+/*.synctex(busy)
+/TMP/*
