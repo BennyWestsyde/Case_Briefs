@@ -33,6 +33,7 @@
 	/brief/reasoning/.initial = ,
 	/brief/opinions/.initial = ,
 	/brief/label/.initial = ,
+	/brief/notes/.initial = ,
 }
 
 
@@ -82,6 +83,7 @@
     \edef\currentreasoning{\unexpanded\expandafter{\pgfkeysvalueof{/brief/reasoning}}}
     \edef\currentopinions{\unexpanded\expandafter{\pgfkeysvalueof{/brief/opinions}}}
     \edef\currentlabel{\unexpanded\expandafter{\pgfkeysvalueof{/brief/label}}}
+	\edef\currentnotes{\unexpanded\expandafter{\pgfkeysvalueof{/brief/notes}}}
 
 
 	% PDF metadata
@@ -169,5 +171,12 @@
         \textit{No separate opinions provided.}
     }{
         \currentopinions
+    }
+
+	\section*{Notes}
+    \ifblank{\currentnotes}{%
+        \textit{No notes provided.}
+    }{
+        \currentnotes
     }
 }

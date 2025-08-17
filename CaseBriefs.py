@@ -95,6 +95,7 @@ class CaseBrief:
     :param reasoning: A string containing the court's reasoning or rationale for its decision.
     :param opinions: A list of strings containing any concurring or dissenting opinions.
     :param label: A Label object representing the citable label of the case.
+    :param notes: A string containing any additional notes about the case.
     """
     def __init__(self, 
                  subject: tuple[Subject,...],
@@ -108,7 +109,8 @@ class CaseBrief:
                  principle: str,
                  reasoning: str,
                  opinions: list,
-                 label: Label):
+                 label: Label,
+                 notes: str):
         self.subject = subject
         self.plaintiff = plaintiff
         self.defendant = defendant
@@ -123,7 +125,8 @@ class CaseBrief:
         self.reasoning = reasoning
         self.opinions = opinions
         self.label = label
-        
+        self.notes = notes
+
     @property
     def title(self):
         return f"{self.plaintiff} v. {self.defendant}"
@@ -193,7 +196,11 @@ class CaseBrief:
     def update_label(self, label: Label):
         """Update the label in the case brief."""
         self.label = label
-        
+
+    def update_notes(self, notes: str):
+        """Update the notes in the case brief."""
+        self.notes = notes
+
     def get_pdf_path(self) -> str:
         """Get the path to the PDF file for this case brief."""
         return os.path.join("./Cases", f"{self.filename}.pdf")
@@ -211,7 +218,9 @@ class CaseBrief:
         procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), procedure_str)
         issue_str = self.issue.replace('\n', r'\\'+'\n')
         issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), issue_str)
-        
+        notes_str = self.notes.replace('\n', r'\\'+'\n')
+        notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), notes_str)
+
         return """
             \\documentclass[../CaseBriefs.tex]{subfiles}
             \\usepackage{lawbrief}
@@ -227,7 +236,8 @@ class CaseBrief:
                     principle={%s},
                     reasoning={%s},
                     opinions={%s},
-                    label={case:%s}
+                    label={case:%s},
+                    notes={%s}
             }
             \\end{document}
         """ % (subjects_str,
@@ -241,7 +251,8 @@ class CaseBrief:
                self.principle,
                self.reasoning,
                opinions_str,
-               self.label)
+               self.label,
+               self.notes)
         
     def save_to_file(self, filename: str):
         """Save the LaTeX representation of the case brief to a file."""
@@ -272,7 +283,7 @@ class CaseBrief:
             content = f.read()
             # Here you would parse the content to extract the case brief details
             # This is a placeholder implementation
-            regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\}'
+            regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}'
             match = re.search(regex, content, re.DOTALL)
             if match:
                 subjects = tuple(Subject(s.strip()) for s in match.group(1).split(',') if s.strip())
@@ -294,54 +305,13 @@ class CaseBrief:
                 reasoning = match.group(10).strip().replace(r'\\'+'\n', '\n')
                 opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', match.group(11).replace(r'\\'+'\n', '\n')).split('\n') if o.strip()]
                 label = Label(match.group(12).strip())
+                notes = match.group(13).strip().replace(r'\\'+'\n', '\n')
             else:
                 raise RuntimeError(f"Failed to parse case brief from {filename}. The file may not be in the correct format.")
-            """
-            plaintiff_end = content.find('},\n', plaintiff_start)
-            plaintiff = content[plaintiff_start:plaintiff_end].strip()
-            defendant_start = content.find('defendant={') + len('defendant={')
-            defendant_end = content.find('},\n', defendant_start)
-            defendant = content[defendant_start:defendant_end].strip()
-            citation_start = content.find('citation={') + len('citation={')
-            citation_end = content.find('},\n', citation_start)
-            citation = content[citation_start:citation_end].strip()
-            facts_start = content.find('facts={') + len('facts={')
-            facts_end = content.find('},\n', facts_start)
-            facts = content[facts_start:facts_end].strip().replace(r'\\'+'\n', '\n')
-            # Regex e
 
-            procedure_start = content.find('procedure={') + len('procedure={')
-            procedure_end = content.find('},\n', procedure_start)
-            procedure = content[procedure_start:procedure_end].strip().replace(r'\\'+'\n', '\n')
-            issue_start = content.find('issue={') + len('issue={')
-            issue_end = content.find('},\n', issue_start)
-            issue = content[issue_start:issue_end].strip().replace(r'\\'+'\n', '\n')
-            holding_start = content.find('holding={') + len('holding={')
-            holding_end = content.find('},\n', holding_start)
-            holding = content[holding_start:holding_end].strip()
-            principle_start = content.find('principle={') + len('principle={')
-            principle_end = content.find('},\n', principle_start)
-            principle = content[principle_start:principle_end].strip()
-            reasoning_start = content.find('reasoning={') + len('reasoning={')
-            reasoning_end = content.find('},\n', reasoning_start)
-            reasoning = content[reasoning_start:reasoning_end].strip()
-            opinions_start = content.find('opinions={') + len('opinions={')
-            opinions_end = content.find('},\n', opinions_start)
-            opinions_str = content[opinions_start:opinions_end].strip()
-            opinions = []
-            if opinions_str:
-                for opinion in opinions_str.split('\n'):
-                    if opinion.strip():
-                        person, text = opinion.split(':', 1)
-                        opinions.append(Opinion(person.strip(), text.strip()))
-            label_start = content.find('label={case:') + len('label={case:')
-            label_end = content.find('}\n', label_start)
-            label = Label(content[label_start:label_end].strip())
-            """
-            
-            return CaseBrief(subjects, plaintiff, defendant, citation, facts, procedure, issue, holding, principle, reasoning, opinions, label)
-            
-            
+            return CaseBrief(subjects, plaintiff, defendant, citation, facts, procedure, issue, holding, principle, reasoning, opinions, label, notes)
+
+
     def render_pdf(self):
         pass
     
@@ -400,12 +370,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtPdf import QPdfDocument
 from PyQt6.QtPdfWidgets import QPdfView
-"""
-from PyQt5.QtWidgets import QGridLayout,QApplication, QMainWindow, QPushButton, QVBoxLayout,QHBoxLayout, QWidget,QListWidget
-from PyQt5.QtWidgets import QLineEdit, QLabel, QMessageBox,QComboBox,QTextEdit
-from PyQt5.QtCore import Qt
-from PyQt5.QtPdf import QPdfDocument
-from PyQt5.QtPdfWidgets import QPdfView"""
+from PyQt6.QtWidgets import QLayout
+
 
 def reload_subjects(case_briefs):
         subjects = []    
@@ -442,7 +408,7 @@ if __name__ == "__main__":
 
             labels = reload_labels(case_briefs.get_case_briefs())
             self.setWindowTitle("Case Brief Creator")
-            self.setGeometry(100, 100, 600, 400)
+            self.setGeometry(100, 100, 600, 500)
             
             self.layout = QGridLayout() # pyright: ignore[reportAttributeAccessIssue]
             self.layout.addWidget(QLabel("Create a new case brief"), 0, 0, 1, 2) # pyright: ignore[reportAttributeAccessIssue]
@@ -460,7 +426,7 @@ if __name__ == "__main__":
             # Subject box entry: a text box to enter subjects. When the user presses enter, the subject is added to a list of subjects.
             subject_entry_box = QLineEdit()
             subject_entry_box.setPlaceholderText("Enter a subject (press Enter to add)")
-            self.layout.addWidget(subject_entry_box, 3, 0, 1, 2) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(subject_entry_box, 3, 0, 1, 4) # pyright: ignore[reportAttributeAccessIssue]
             # A dropdown list of existing subjects that can be selected by clicking them and then pressing enter to add them
             subject_existing_combo = QComboBox()
             self.existing_subjects_str_list = []
@@ -474,35 +440,38 @@ if __name__ == "__main__":
             subject_existing_combo.currentIndexChanged.connect(lambda: subject_entry_box.setText(subject_existing_combo.currentText()) if subject_existing_combo.currentText() != "Select an existing subject" else subject_entry_box.setText(""))
             # When the user presses enter in the subject entry box, the subject is added to the existing subjects combo box if it is not already present
             subject_entry_box.returnPressed.connect(lambda: self.add_subject(subject_entry_box.text()))
-            self.layout.addWidget(subject_existing_combo, 3, 2) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(subject_existing_combo, 3, 4, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             subjects_list = QListWidget()
             # Remove a subject when it is selected and the user presses delete
             subjects_list.itemDoubleClicked.connect(lambda: self.remove_subject(subjects_list.currentItem().text()) if subjects_list.currentItem() else None)
-            self.layout.addWidget(subjects_list, 4, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(subjects_list, 4, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.facts_entry = QTextEdit()
             self.facts_entry.setPlaceholderText("Enter relevant facts of the case")
-            self.layout.addWidget(self.facts_entry, 5, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.facts_entry, 5, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.procedure_entry = QTextEdit()
             self.procedure_entry.setPlaceholderText("Enter the procedural history of the case")
-            self.layout.addWidget(self.procedure_entry, 6, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.procedure_entry, 6, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.issue_entry = QTextEdit()
             self.issue_entry.setPlaceholderText("Enter the legal issue(s) presented in the case")
-            self.layout.addWidget(self.issue_entry, 7, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.issue_entry, 7, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.holding_entry = QLineEdit()
             self.holding_entry.setPlaceholderText("Enter the court's holding or decision")
-            self.layout.addWidget(self.holding_entry, 8, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.holding_entry, 8, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.principle_entry = QLineEdit()
             self.principle_entry.setPlaceholderText("Enter the legal principle established by the case")
-            self.layout.addWidget(self.principle_entry, 9, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.principle_entry, 9, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.reasoning_entry = QTextEdit()
             self.reasoning_entry.setPlaceholderText("Enter the court's reasoning or rationale for its decision")
-            self.layout.addWidget(self.reasoning_entry, 10, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.reasoning_entry, 10, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.opinions_entry = QTextEdit()
             self.opinions_entry.setPlaceholderText("Enter any concurring or dissenting opinions (format: Person: Opinion)")
-            self.layout.addWidget(self.opinions_entry, 11, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.opinions_entry, 11, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
             self.label_entry = QLineEdit()
             self.label_entry.setPlaceholderText("Enter a unique label for the case")
-            self.layout.addWidget(self.label_entry, 12, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.label_entry, 12, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.notes_entry = QTextEdit()
+            self.notes_entry.setPlaceholderText("Enter any case notes")
+            self.layout.addWidget(self.notes_entry, 4, 5, 9, 4) # pyright: ignore[reportAttributeAccessIssue]
             self.create_button = QPushButton("Create Case Brief")
             self.create_button.clicked.connect(lambda: self.create_case_brief(
                 self.plaintiff_entry.text(),
@@ -516,7 +485,8 @@ if __name__ == "__main__":
                 self.principle_entry.text(),
                 self.reasoning_entry.toPlainText(),
                 self.opinions_entry.toPlainText(),
-                self.label_entry.text()
+                self.label_entry.text(),
+                self.notes_entry.toPlainText()
             ) if self.verify_label(self.label_entry.text()) else None)
             self.layout.addWidget(self.create_button, 13, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
             self.setLayout(self.layout) # pyright: ignore[reportArgumentType]
@@ -567,7 +537,8 @@ if __name__ == "__main__":
                               principle: str, 
                               reasoning: str, 
                               opinions_str: str, 
-                              label: str):
+                              label: str,
+                              notes: str):
             """Create a new case brief and save it to a file."""
             if not plaintiff or not defendant or not citation or not label:
                 QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation and Label cannot be empty.")
@@ -592,7 +563,8 @@ if __name__ == "__main__":
                 principle=principle,
                 reasoning=reasoning,
                 opinions=opinions,
-                label=Label(label)
+                label=Label(label),
+                notes=notes
             )
 
             filename = f"./Cases/{case_brief.filename}.tex"
