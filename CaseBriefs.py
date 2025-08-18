@@ -252,7 +252,7 @@ class CaseBrief:
                self.reasoning,
                opinions_str,
                self.label,
-               self.notes)
+               notes_str)
         
     def save_to_file(self, filename: str):
         """Save the LaTeX representation of the case brief to a file."""
@@ -656,6 +656,7 @@ if __name__ == "__main__":
             self.creator.label_entry.setText(case_brief.label.text)
             # Disable the label entry to prevent changing it
             self.creator.label_entry.setDisabled(True)
+            self.creator.notes_entry.setPlainText(case_brief.notes)
             # Set the create button to update the existing case brief instead of creating a new one
             self.creator.create_button.setText("Update Case Brief")
             self.creator.create_button.clicked.disconnect()
