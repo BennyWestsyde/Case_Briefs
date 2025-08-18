@@ -1,6 +1,3 @@
-./Cases/Brown_V_Board_of_Education.tex
 ./Cases/Brown_V_Kendall.tex
 ./Cases/Cohen_V_Petty.tex
-./Cases/Plantiff1_V_Defendant1.tex
-./Cases/Plessy_V_Ferguson.tex
 ./Cases/Spano_V_Perini_Corp..tex
