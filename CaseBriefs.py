@@ -108,7 +108,7 @@ class CaseBrief:
                  holding: str,
                  principle: str,
                  reasoning: str,
-                 opinions: list,
+                 opinions: list[Opinion],
                  label: Label,
                  notes: str):
         self.subject = subject
@@ -209,16 +209,16 @@ class CaseBrief:
         """Generate a LaTeX representation of the case brief."""
         subjects_str = ', '.join(str(s) for s in self.subject)
         opinions_str = ('\n').join(str(op) for op in self.opinions)
-        opinions_str = opinions_str.replace('\n', r'\\'+'\n')
+        opinions_str = opinions_str.replace('\n', r'\\'+'\n').replace("$", r"\$")
         opinions_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), opinions_str)
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
-        facts_str = self.facts.replace('\n', r'\\'+'\n')
+        facts_str = self.facts.replace('\n', r'\\'+'\n').replace("$", r"\$")
         facts_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), facts_str)
-        procedure_str = self.procedure.replace('\n', r'\\'+'\n')
+        procedure_str = self.procedure.replace('\n', r'\\'+'\n').replace("$", r"\$")
         procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), procedure_str)
-        issue_str = self.issue.replace('\n', r'\\'+'\n')
+        issue_str = self.issue.replace('\n', r'\\'+'\n').replace("$", r"\$")
         issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), issue_str)
-        notes_str = self.notes.replace('\n', r'\\'+'\n')
+        notes_str = self.notes.replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), notes_str)
 
         return """
@@ -290,22 +290,22 @@ class CaseBrief:
                 plaintiff = match.group(2).strip()
                 defendant = match.group(3).strip()
                 citation = match.group(4).strip()
-                facts = match.group(5).strip().replace(r'\\'+'\n', '\n')
+                facts = match.group(5).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 citation_regex = r'\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}'
                 facts = re.sub(citation_regex, r'CITE(\1)', facts)
-                procedure = match.group(6).strip().replace(r'\\'+'\n', '\n')
+                procedure = match.group(6).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 procedure = re.sub(citation_regex, r'CITE(\1)', procedure)
-                issue = match.group(7).strip().replace(r'\\'+'\n', '\n')
+                issue = match.group(7).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 issue = re.sub(citation_regex, r'CITE(\1)', issue)
                 holding = match.group(8).strip()
                 principle = match.group(9).strip()
-                reasoning = match.group(10).strip().replace(r'\\'+'\n', '\n')
+                reasoning = match.group(10).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', match.group(11).replace(r'\\'+'\n', '\n')).split('\n') if o.strip()]
                 label = Label(match.group(12).strip())
-                notes = match.group(13).strip().replace(r'\\'+'\n', '\n')
+                notes = match.group(13).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             else:
                 raise RuntimeError(f"Failed to parse case brief from {filename}. The file may not be in the correct format.")
 
@@ -323,8 +323,8 @@ class CaseBrief:
 class CaseBriefs:
     """A class to manage multiple case briefs."""
     def __init__(self):
-        self.case_briefs = []
-    
+        self.case_briefs: list[CaseBrief] = []
+
     def reload_cases(self):
         """Reload all case briefs from the ./Cases directory."""
         for filename in os.listdir("./Cases"):
@@ -364,25 +364,23 @@ class CaseBriefs:
             
             
 from PyQt6.QtWidgets import (
-    QGridLayout, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout,
-    QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
+    QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtPdf import QPdfDocument
 from PyQt6.QtPdfWidgets import QPdfView
-from PyQt6.QtWidgets import QLayout
 
 
-def reload_subjects(case_briefs):
-        subjects = []    
+def reload_subjects(case_briefs: list[CaseBrief]) -> list[Subject]:
+        subjects: list[Subject] = []    
         for case_brief in case_briefs:
             for subject in case_brief.subject:
                 if subject not in subjects:
                     subjects.append(subject)
         return subjects
 
-def reload_labels(case_briefs):
-    labels = []
+def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
+    labels: list[Label] = []
     for case_brief in case_briefs:
         if case_brief.label not in labels:
             labels.append(case_brief.label)
@@ -406,74 +404,74 @@ if __name__ == "__main__":
 
             subjects = reload_subjects(case_briefs.get_case_briefs())
 
-            labels = reload_labels(case_briefs.get_case_briefs())
+            # labels = reload_labels(case_briefs.get_case_briefs())
             self.setWindowTitle("Case Brief Creator")
             self.setGeometry(100, 100, 600, 500)
             
             self.layout = QGridLayout() # pyright: ignore[reportAttributeAccessIssue]
-            self.layout.addWidget(QLabel("Create a new case brief"), 0, 0, 1, 2) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(QLabel("Create a new case brief"), 0, 0, 1, 2) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.plaintiff_entry = QLineEdit()
             self.plaintiff_entry.setPlaceholderText("Plaintiff Name")
             vs_label = QLabel("v.")
             self.defendant_entry = QLineEdit()
             self.defendant_entry.setPlaceholderText("Defendant Name")
-            self.layout.addWidget(self.plaintiff_entry, 1, 0) # pyright: ignore[reportAttributeAccessIssue]
-            self.layout.addWidget(vs_label, 1, 1) # pyright: ignore[reportAttributeAccessIssue]
-            self.layout.addWidget(self.defendant_entry, 1, 2) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.plaintiff_entry, 1, 0) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            self.layout.addWidget(vs_label, 1, 1) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            self.layout.addWidget(self.defendant_entry, 1, 2) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.citation_entry = QLineEdit()
             self.citation_entry.setPlaceholderText("Citation (Year)")
-            self.layout.addWidget(self.citation_entry, 2, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.citation_entry, 2, 0, 1, 3) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             # Subject box entry: a text box to enter subjects. When the user presses enter, the subject is added to a list of subjects.
             subject_entry_box = QLineEdit()
             subject_entry_box.setPlaceholderText("Enter a subject (press Enter to add)")
-            self.layout.addWidget(subject_entry_box, 3, 0, 1, 4) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(subject_entry_box, 3, 0, 1, 4) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             # A dropdown list of existing subjects that can be selected by clicking them and then pressing enter to add them
             subject_existing_combo = QComboBox()
-            self.existing_subjects_str_list = []
+            self.existing_subjects_str_list: list[str] = []
             for subject in subjects:
                 if subject.name not in self.existing_subjects_str_list:
                     self.existing_subjects_str_list.append(subject.name)
             self.existing_subjects_str_list.sort()
-            self.current_subjects_str_list = []
+            self.current_subjects_str_list: list[str] = []
             subject_existing_combo.addItem("Select an existing subject")
-            subject_existing_combo.addItems(self.existing_subjects_str_list)
-            subject_existing_combo.currentIndexChanged.connect(lambda: subject_entry_box.setText(subject_existing_combo.currentText()) if subject_existing_combo.currentText() != "Select an existing subject" else subject_entry_box.setText(""))
+            subject_existing_combo.addItems(self.existing_subjects_str_list) # pyright: ignore[reportUnknownMemberType]
+            subject_existing_combo.currentIndexChanged.connect(lambda: subject_entry_box.setText(subject_existing_combo.currentText()) if subject_existing_combo.currentText() != "Select an existing subject" else subject_entry_box.setText("")) # pyright: ignore[reportUnknownMemberType]
             # When the user presses enter in the subject entry box, the subject is added to the existing subjects combo box if it is not already present
-            subject_entry_box.returnPressed.connect(lambda: self.add_subject(subject_entry_box.text()))
-            self.layout.addWidget(subject_existing_combo, 3, 4, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            subject_entry_box.returnPressed.connect(lambda: self.add_subject(subject_entry_box.text())) # pyright: ignore[reportUnknownMemberType]
+            self.layout.addWidget(subject_existing_combo, 3, 4, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             subjects_list = QListWidget()
             # Remove a subject when it is selected and the user presses delete
-            subjects_list.itemDoubleClicked.connect(lambda: self.remove_subject(subjects_list.currentItem().text()) if subjects_list.currentItem() else None)
-            self.layout.addWidget(subjects_list, 4, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            subjects_list.itemDoubleClicked.connect(lambda: self.remove_subject(subjects_list.currentItem().text()) if subjects_list.currentItem() else None) # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType]
+            self.layout.addWidget(subjects_list, 4, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.facts_entry = QTextEdit()
             self.facts_entry.setPlaceholderText("Enter relevant facts of the case")
-            self.layout.addWidget(self.facts_entry, 5, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.facts_entry, 5, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.procedure_entry = QTextEdit()
             self.procedure_entry.setPlaceholderText("Enter the procedural history of the case")
-            self.layout.addWidget(self.procedure_entry, 6, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.procedure_entry, 6, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.issue_entry = QTextEdit()
             self.issue_entry.setPlaceholderText("Enter the legal issue(s) presented in the case")
-            self.layout.addWidget(self.issue_entry, 7, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.issue_entry, 7, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.holding_entry = QLineEdit()
             self.holding_entry.setPlaceholderText("Enter the court's holding or decision")
-            self.layout.addWidget(self.holding_entry, 8, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.holding_entry, 8, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.principle_entry = QLineEdit()
             self.principle_entry.setPlaceholderText("Enter the legal principle established by the case")
-            self.layout.addWidget(self.principle_entry, 9, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.principle_entry, 9, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.reasoning_entry = QTextEdit()
             self.reasoning_entry.setPlaceholderText("Enter the court's reasoning or rationale for its decision")
-            self.layout.addWidget(self.reasoning_entry, 10, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.reasoning_entry, 10, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.opinions_entry = QTextEdit()
             self.opinions_entry.setPlaceholderText("Enter any concurring or dissenting opinions (format: Person: Opinion)")
-            self.layout.addWidget(self.opinions_entry, 11, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.opinions_entry, 11, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.label_entry = QLineEdit()
             self.label_entry.setPlaceholderText("Enter a unique label for the case")
-            self.layout.addWidget(self.label_entry, 12, 0, 1, 5) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.label_entry, 12, 0, 1, 5) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.notes_entry = QTextEdit()
             self.notes_entry.setPlaceholderText("Enter any case notes")
-            self.layout.addWidget(self.notes_entry, 4, 5, 9, 4) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.notes_entry, 4, 5, 9, 4) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.create_button = QPushButton("Create Case Brief")
-            self.create_button.clicked.connect(lambda: self.create_case_brief(
+            self.create_button.clicked.connect(lambda: self.create_case_brief( # pyright: ignore[reportUnknownMemberType]
                 self.plaintiff_entry.text(),
                 self.defendant_entry.text(),
                 self.citation_entry.text(),
@@ -488,7 +486,7 @@ if __name__ == "__main__":
                 self.label_entry.text(),
                 self.notes_entry.toPlainText()
             ) if self.verify_label(self.label_entry.text()) else None)
-            self.layout.addWidget(self.create_button, 13, 0, 1, 3) # pyright: ignore[reportAttributeAccessIssue]
+            self.layout.addWidget(self.create_button, 13, 0, 1, 3) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.setLayout(self.layout) # pyright: ignore[reportArgumentType]
             
         def add_subject(self, subject: str):
@@ -513,11 +511,12 @@ if __name__ == "__main__":
             
         def rerender_subjects_list(self):
             """Rerender the subjects list in the GUI."""
-            subjects_list = self.layout.itemAtPosition(4, 0).widget() # pyright: ignore[reportAttributeAccessIssue]
-            subjects_list.clear()
-            for subject in self.current_subjects_str_list:
-                subjects_list.addItem(subject)
-                
+            subjects_list = self.layout.itemAtPosition(4, 0).widget() # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+            if subjects_list is not None:
+                subjects_list.clear() # pyright: ignore[reportUnknownMemberType]
+                for subject in self.current_subjects_str_list:
+                    subjects_list.addItem(subject) # pyright: ignore[reportUnknownMemberType]
+
         def verify_label(self, label: str) -> bool:
             """Verify if the label is unique."""
             if any(cb.label.text == label for cb in case_briefs.get_case_briefs()):
@@ -543,8 +542,8 @@ if __name__ == "__main__":
             if not plaintiff or not defendant or not citation or not label:
                 QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation and Label cannot be empty.")
                 return
-            
-            opinions = []
+
+            opinions: list[Opinion] = []
             if opinions_str:
                 for opinion in opinions_str.split(','):
                     if ':' in opinion:
@@ -581,8 +580,8 @@ if __name__ == "__main__":
         def __init__(self):
             super().__init__()
             case_briefs.reload_cases()
-            subjects = reload_subjects(case_briefs.get_case_briefs())
-            labels = reload_labels(case_briefs.get_case_briefs())
+            # subjects = reload_subjects(case_briefs.get_case_briefs())
+            # labels = reload_labels(case_briefs.get_case_briefs())
             self.setWindowTitle("Case Brief Manager")
             self.setGeometry(100, 100, 600, 400)
             layout = QGridLayout()
@@ -592,14 +591,14 @@ if __name__ == "__main__":
             search_entry = QLineEdit()
             search_entry.setPlaceholderText("Search case briefs...")
             layout.addWidget(search_entry, 0, 0)
-            search_entry.textChanged.connect(self.filter_case_briefs)
+            search_entry.textChanged.connect(self.filter_case_briefs) # pyright: ignore[reportUnknownMemberType]
 
             for index, case_brief in enumerate(case_briefs.get_case_briefs()):
                 case_brief_item = QLabel(case_brief.title)
                 case_brief_edit_button = QPushButton("Edit")
-                case_brief_edit_button.clicked.connect(lambda _, cb=case_brief: self.edit_case_brief(cb))
+                case_brief_edit_button.clicked.connect(lambda _, cb=case_brief: self.edit_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
                 case_brief_view_button = QPushButton("View")
-                case_brief_view_button.clicked.connect(lambda _, cb=case_brief: self.view_case_brief(cb))
+                case_brief_view_button.clicked.connect(lambda _, cb=case_brief: self.view_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
                 case_brief_item.setToolTip(f"Plaintiff: {case_brief.plaintiff}\nDefendant: {case_brief.defendant}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subject)}\nLabel: {case_brief.label.text}")
                 layout.addWidget(case_brief_item, index + 1, 0)
                 layout.addWidget(case_brief_edit_button, index + 1, 1)
@@ -617,24 +616,24 @@ if __name__ == "__main__":
             pdf_path = case_brief.compile_to_pdf()
             viewer = PdfWindow(pdf_path, case_brief.title)
             viewer.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-            self._pdf_windows.append(viewer)
-            viewer.destroyed.connect(lambda _=None, v=viewer: self._pdf_windows.remove(v))
+            self._pdf_windows.append(viewer) # pyright: ignore[reportUnknownMemberType]
+            viewer.destroyed.connect(lambda _=None, v=viewer: self._pdf_windows.remove(v)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             viewer.show()
 
 
         def filter_case_briefs(self, text: str):
             """Filter the case briefs based on the search text."""
-            for i in range(self.layout.rowCount()):
-                item = self.layout.itemAtPosition(i, 0)
+            for i in range(self.layout.rowCount()): # pyright: ignore[reportUnknownArgumentType, reportAttributeAccessIssue, reportUnknownMemberType]
+                item: QLayoutItem = self.layout.itemAtPosition(i, 0) # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
                 if item:
-                    widget = item.widget()
+                    widget: QWidget = item.widget() # pyright: ignore[reportUnknownVariableType, reportAssignmentType, reportUnknownMemberType]
                     if isinstance(widget, QLabel):
                         if text.lower() in widget.text().lower():
                             widget.show()
-                            self.layout.itemAtPosition(i, 1).widget().show()  # Show the edit button as well
+                            self.layout.itemAtPosition(i, 1).widget().show()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
                         else:
                             widget.hide()
-                            self.layout.itemAtPosition(i, 1).widget().hide()  # Hide the edit button as well
+                            self.layout.itemAtPosition(i, 1).widget().hide()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
             
         def edit_case_brief(self, case_brief: CaseBrief):
             """View the details of a case brief."""
@@ -659,8 +658,8 @@ if __name__ == "__main__":
             self.creator.notes_entry.setPlainText(case_brief.notes)
             # Set the create button to update the existing case brief instead of creating a new one
             self.creator.create_button.setText("Update Case Brief")
-            self.creator.create_button.clicked.disconnect()
-            self.creator.create_button.clicked.connect(lambda: self.update_case_brief(
+            self.creator.create_button.clicked.disconnect() # pyright: ignore[reportUnknownMemberType]
+            self.creator.create_button.clicked.connect(lambda: self.update_case_brief( # pyright: ignore[reportUnknownMemberType]
                 case_brief,
                 self.creator.plaintiff_entry.text(),
                 self.creator.defendant_entry.text(),
@@ -696,7 +695,7 @@ if __name__ == "__main__":
             if not plaintiff or not defendant or not citation or not label:
                 QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation and Label cannot be empty.")
                 return
-            opinions = []
+            opinions: list[Opinion] = []
             if opinions_str:
                 for opinion in opinions_str.split(','):
                     if ':' in opinion:
@@ -748,15 +747,15 @@ if __name__ == "__main__":
             
             layout = QGridLayout()
             new_case_brief_button = QPushButton("Create Case Brief")
-            new_case_brief_button.clicked.connect(self.create_case_brief)
+            new_case_brief_button.clicked.connect(self.create_case_brief) # pyright: ignore[reportUnknownMemberType]
             layout.addWidget(new_case_brief_button, 0, 0, 1, 1)
 
             view_case_briefs_button = QPushButton("View Case Briefs")
-            view_case_briefs_button.clicked.connect(self.view_case_briefs)
+            view_case_briefs_button.clicked.connect(self.view_case_briefs) # pyright: ignore[reportUnknownMemberType]
             layout.addWidget(view_case_briefs_button, 1, 0, 1, 1)
 
             render_pdf_button = QPushButton("Render PDF")
-            render_pdf_button.clicked.connect(self.render_pdf)
+            render_pdf_button.clicked.connect(self.render_pdf) # pyright: ignore[reportUnknownMemberType]
             layout.addWidget(render_pdf_button, 2, 0, 1, 1)
 
             container = QWidget()
