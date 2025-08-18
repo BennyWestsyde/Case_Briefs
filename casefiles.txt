@@ -1,3 +1,6 @@
 ./Cases/Brown_V_Kendall.tex
 ./Cases/Cohen_V_Petty.tex
-./Cases/Spano_V_Perini_Corp..tex
+./Cases/Garratt_V_Dailey.tex
+./Cases/Hawkins_V_McGee.tex
+./Cases/Spano_V_Perini_Corp.tex
+./Cases/Wagner_V_State.tex
