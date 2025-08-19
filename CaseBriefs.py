@@ -366,9 +366,10 @@ class CaseBriefs:
 from PyQt6.QtWidgets import (
     QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
 )
-from PyQt6.QtCore import Qt
 from PyQt6.QtPdf import QPdfDocument
 from PyQt6.QtPdfWidgets import QPdfView
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
 
 
 def reload_subjects(case_briefs: list[CaseBrief]) -> list[Subject]:
@@ -610,16 +611,21 @@ if __name__ == "__main__":
             # CaseBriefManager.__init__
             self._pdf_windows = []  # keep viewers alive
 
-        # CaseBriefManager.view_case_brief
         def view_case_brief(self, case_brief: CaseBrief):
-            """View a case brief in a PDF viewer."""
+            pdf_path = case_brief.compile_to_pdf()
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
+
+        # CaseBriefManager.view_case_brief
+        """
+        def view_case_brief(self, case_brief: CaseBrief):
+            \"""View a case brief in a PDF viewer.""\"
             pdf_path = case_brief.compile_to_pdf()
             viewer = PdfWindow(pdf_path, case_brief.title)
             viewer.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
             self._pdf_windows.append(viewer) # pyright: ignore[reportUnknownMemberType]
             viewer.destroyed.connect(lambda _=None, v=viewer: self._pdf_windows.remove(v)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             viewer.show()
-
+"""
 
         def filter_case_briefs(self, text: str):
             """Filter the case briefs based on the search text."""
