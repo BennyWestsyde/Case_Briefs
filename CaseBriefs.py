@@ -87,6 +87,7 @@ class CaseBrief:
     :param plaintiff: The name of the plaintiff in the case.
     :param defendant: The name of the defendant in the case.
     :param citation: The citation of the case, including the year.
+    :param course: The name of the course for which the case brief is being prepared.
     :param facts: A string containing the relevant facts of the case.
     :param procedure: A string describing the procedural history of the case.
     :param issue: A string stating the legal issue(s) presented in the case.
@@ -102,6 +103,7 @@ class CaseBrief:
                  plaintiff: str,
                  defendant: str,
                  citation: str,
+                 course: str,
                  facts: str,
                  procedure: str,
                  issue: str,
@@ -116,6 +118,7 @@ class CaseBrief:
         self.defendant = defendant
         self.title = f"{plaintiff} v. {defendant}"
         self.filename = f"{plaintiff}_V_{defendant}".replace(" ", "_")
+        self.course = course
         self.citation = citation
         self.facts = facts
         self.procedure = procedure
@@ -229,6 +232,7 @@ class CaseBrief:
                     plaintiff={%s},
                     defendant={%s},
                     citation={%s},
+                    course={%s},
                     facts={%s},
                     procedure={%s},
                     issue={%s},
@@ -244,6 +248,7 @@ class CaseBrief:
                self.plaintiff,
                self.defendant,
                self.citation,
+               self.course,
                facts_str,
                procedure_str,
                issue_str,
@@ -283,33 +288,34 @@ class CaseBrief:
             content = f.read()
             # Here you would parse the content to extract the case brief details
             # This is a placeholder implementation
-            regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}'
+            regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}'
             match = re.search(regex, content, re.DOTALL)
             if match:
                 subjects = tuple(Subject(s.strip()) for s in match.group(1).split(',') if s.strip())
                 plaintiff = match.group(2).strip()
                 defendant = match.group(3).strip()
                 citation = match.group(4).strip()
-                facts = match.group(5).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                course = match.group(5).strip()
+                facts = match.group(6).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 citation_regex = r'\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}'
                 facts = re.sub(citation_regex, r'CITE(\1)', facts)
-                procedure = match.group(6).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                procedure = match.group(7).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 procedure = re.sub(citation_regex, r'CITE(\1)', procedure)
-                issue = match.group(7).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                issue = match.group(8).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 issue = re.sub(citation_regex, r'CITE(\1)', issue)
-                holding = match.group(8).strip()
-                principle = match.group(9).strip()
-                reasoning = match.group(10).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-                opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', match.group(11).replace(r'\\'+'\n', '\n')).split('\n') if o.strip()]
-                label = Label(match.group(12).strip())
-                notes = match.group(13).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                holding = match.group(9).strip()
+                principle = match.group(10).strip()
+                reasoning = match.group(11).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', match.group(12).replace(r'\\'+'\n', '\n')).split('\n') if o.strip()]
+                label = Label(match.group(13).strip())
+                notes = match.group(14).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             else:
                 raise RuntimeError(f"Failed to parse case brief from {filename}. The file may not be in the correct format.")
 
-            return CaseBrief(subjects, plaintiff, defendant, citation, facts, procedure, issue, holding, principle, reasoning, opinions, label, notes)
+            return CaseBrief(subjects, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, opinions, label, notes)
 
 
     def render_pdf(self):
@@ -423,6 +429,11 @@ if __name__ == "__main__":
             self.citation_entry.setPlaceholderText("Citation (Year)")
             self.layout.addWidget(self.citation_entry, 2, 0, 1, 3) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             # Subject box entry: a text box to enter subjects. When the user presses enter, the subject is added to a list of subjects.
+            self.class_selector = QComboBox()
+            self.class_selector.setPlaceholderText("Select a class")
+            subjects_str_list = ["Contracts","Torts", "Civil Procedure","Legal Practice"]
+            self.class_selector.addItems(subjects_str_list) # pyright: ignore[reportUnknownMemberType]
+            self.layout.addWidget(self.class_selector, 2, 4, 1, 4) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             subject_entry_box = QLineEdit()
             subject_entry_box.setPlaceholderText("Enter a subject (press Enter to add)")
             self.layout.addWidget(subject_entry_box, 3, 0, 1, 4) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
@@ -476,6 +487,7 @@ if __name__ == "__main__":
                 self.plaintiff_entry.text(),
                 self.defendant_entry.text(),
                 self.citation_entry.text(),
+                self.class_selector.currentText(),
                 self.current_subjects_str_list,
                 self.facts_entry.toPlainText(),
                 self.procedure_entry.toPlainText(),
@@ -499,6 +511,7 @@ if __name__ == "__main__":
                 subjects.append(Subject(subject))
             if subject not in self.current_subjects_str_list:
                 self.current_subjects_str_list.append(subject)
+            self.current_subjects_str_list.sort()
             self.rerender_subjects_list()
             
         def remove_subject(self, subject: str):
@@ -529,6 +542,7 @@ if __name__ == "__main__":
                               plaintiff: str, 
                               defendant: str, 
                               citation: str, 
+                              course: str,
                               subjects: list[str], 
                               facts: str, 
                               procedure: str, 
@@ -556,6 +570,7 @@ if __name__ == "__main__":
                 plaintiff=plaintiff,
                 defendant=defendant,
                 citation=citation,
+                course=course,
                 facts=facts,
                 procedure=procedure,
                 issue=issue,
@@ -648,6 +663,7 @@ if __name__ == "__main__":
             self.creator.plaintiff_entry.setText(case_brief.plaintiff)
             self.creator.defendant_entry.setText(case_brief.defendant)
             self.creator.citation_entry.setText(case_brief.citation)
+            self.creator.class_selector.setCurrentText(case_brief.course)
             self.creator.current_subjects_str_list = [s.name for s in case_brief.subject]
             self.creator.rerender_subjects_list()
             self.creator.facts_entry.setPlainText(case_brief.facts)
@@ -710,6 +726,7 @@ if __name__ == "__main__":
             case_brief.update_plaintiff(plaintiff)
             case_brief.update_defendant(defendant)
             case_brief.update_citation(citation)
+            case_brief.course = self.creator.class_selector.currentText()
             case_brief.subject = tuple(Subject(s) for s in subjects)
             case_brief.update_facts(facts)
             case_brief.update_procedure(procedure)

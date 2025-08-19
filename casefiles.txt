@@ -2,5 +2,8 @@
 ./Cases/Cohen_V_Petty.tex
 ./Cases/Garratt_V_Dailey.tex
 ./Cases/Hawkins_V_McGee.tex
+./Cases/McGuire_V_Almy.tex
+./Cases/Ranson_V_Kitner.tex
 ./Cases/Spano_V_Perini_Corp.tex
+./Cases/Talmage_V_Smith.tex
 ./Cases/Wagner_V_State.tex

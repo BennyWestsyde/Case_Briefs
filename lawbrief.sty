@@ -25,6 +25,7 @@
 	/brief/plaintiff/.initial = ,
 	/brief/defendant/.initial = ,
 	/brief/citation/.initial = ,
+	/brief/course/.initial = ,
 	/brief/facts/.initial = ,
 	/brief/procedure/.initial = ,
 	/brief/issue/.initial = ,
@@ -75,6 +76,7 @@
 	\edef\currentplaintiff{\unexpanded\expandafter{\pgfkeysvalueof{/brief/plaintiff}}}
 	\edef\currentdefendant{\unexpanded\expandafter{\pgfkeysvalueof{/brief/defendant}}}
 	\edef\currentcitation{\unexpanded\expandafter{\pgfkeysvalueof{/brief/citation}}}
+	\edef\currentcourse{\unexpanded\expandafter{\pgfkeysvalueof{/brief/course}}}
     \edef\currentfacts{\unexpanded\expandafter{\pgfkeysvalueof{/brief/facts}}}
     \edef\currentprocedure{\unexpanded\expandafter{\pgfkeysvalueof{/brief/procedure}}}
     \edef\currentissue{\unexpanded\expandafter{\pgfkeysvalueof{/brief/issue}}}
@@ -121,6 +123,15 @@
 			\currentcitation
 		\end{large}
 	\end{center}
+
+	% Display course
+	\section*{Course}
+	\ifblank{\currentcourse}{%
+			\textit{No course specified.}
+	}{
+		\currentcourse
+		\indexsubjects{\currentcourse}
+	}
 
 	% Display subject
 	\section*{Keyword Subject}
