@@ -1,9 +1,16 @@
 ./Cases/Brown_V_Kendall.tex
 ./Cases/Cohen_V_Petty.tex
+./Cases/Fisher_V_Carrousel_Moter_Hotel,_Inc.tex
 ./Cases/Garratt_V_Dailey.tex
 ./Cases/Hawkins_V_McGee.tex
+./Cases/Kolodziej_V_Mason.tex
+./Cases/Lucy_V_Zehmer.tex
 ./Cases/McGuire_V_Almy.tex
+./Cases/Meyer_V_Uber_Technologies,_Inc.tex
 ./Cases/Ranson_V_Kitner.tex
 ./Cases/Spano_V_Perini_Corp.tex
+./Cases/Stepp_V_Freeman.tex
 ./Cases/Talmage_V_Smith.tex
 ./Cases/Wagner_V_State.tex
+./Cases/Wallace_V_Rosen.tex
+./Cases/Western_Union_Telegraph_Co_V_Hill.tex
