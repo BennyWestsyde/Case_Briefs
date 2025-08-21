@@ -358,7 +358,7 @@ class CaseBriefs:
 
     def get_case_briefs(self):
         """Get all case briefs in the collection."""
-        return self.case_briefs
+        return sorted(self.case_briefs, key=lambda cb: cb.label.text)
     
     def cite_case_brief(self, case_brief_label: str) -> str:
         """Cite a case brief by its label."""
@@ -370,10 +370,8 @@ class CaseBriefs:
             
             
 from PyQt6.QtWidgets import (
-    QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
+    QScrollArea, QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
 )
-from PyQt6.QtPdf import QPdfDocument
-from PyQt6.QtPdfWidgets import QPdfView
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 
@@ -588,6 +586,10 @@ if __name__ == "__main__":
             QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
             self.close()
 
+        def show(self):
+            super().show()
+            print("Case brief creation window opened")
+
     class CaseBriefManager(QWidget):
         """A window for managing existing case briefs.
         This window should bring up a list of the existing case briefs, 
@@ -600,7 +602,13 @@ if __name__ == "__main__":
             # labels = reload_labels(case_briefs.get_case_briefs())
             self.setWindowTitle("Case Brief Manager")
             self.setGeometry(100, 100, 600, 400)
-            layout = QGridLayout()
+            scrollable_area = QScrollArea(self)
+            scrollable_area.setWidgetResizable(True)
+            content_widget = QWidget()
+            layout = QGridLayout(content_widget)
+            scrollable_area.setWidget(content_widget)
+            main_layout = QVBoxLayout(self)
+            main_layout.addWidget(scrollable_area)
             
             
             # Add a search bar to search for case briefs
@@ -615,7 +623,7 @@ if __name__ == "__main__":
                 case_brief_edit_button.clicked.connect(lambda _, cb=case_brief: self.edit_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
                 case_brief_view_button = QPushButton("View")
                 case_brief_view_button.clicked.connect(lambda _, cb=case_brief: self.view_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-                case_brief_item.setToolTip(f"Plaintiff: {case_brief.plaintiff}\nDefendant: {case_brief.defendant}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subject)}\nLabel: {case_brief.label.text}")
+                case_brief_item.setToolTip(f"Course: {case_brief.course}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subject)}\nLabel: {case_brief.label.text}")
                 layout.addWidget(case_brief_item, index + 1, 0)
                 layout.addWidget(case_brief_edit_button, index + 1, 1)
                 layout.addWidget(case_brief_view_button, index + 1, 2)
@@ -649,12 +657,14 @@ if __name__ == "__main__":
                 if item:
                     widget: QWidget = item.widget() # pyright: ignore[reportUnknownVariableType, reportAssignmentType, reportUnknownMemberType]
                     if isinstance(widget, QLabel):
-                        if text.lower() in widget.text().lower():
+                        if text.lower() in widget.text().lower() or text.lower() in widget.toolTip().lower():
                             widget.show()
                             self.layout.itemAtPosition(i, 1).widget().show()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
+                            self.layout.itemAtPosition(i, 2).widget().show()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] # Show the view button as well
                         else:
                             widget.hide()
                             self.layout.itemAtPosition(i, 1).widget().hide()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
+                            self.layout.itemAtPosition(i, 2).widget().hide()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] # Hide the view button as well
             
         def edit_case_brief(self, case_brief: CaseBrief):
             """View the details of a case brief."""
@@ -742,24 +752,27 @@ if __name__ == "__main__":
             QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
             self.creator.close()
             self.close()
-            
-    class PdfWindow(QWidget):
-        def __init__(self, pdf_path: str, title: str):
-            super().__init__()
-            self.setWindowTitle(title)
-            self.setGeometry(100, 100, 800, 600)
-
-            self.doc = QPdfDocument(self)
-            self.doc.load(pdf_path)
-            self.view = QPdfView(self)
-            self.view.setDocument(self.doc)
-            self.view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
-            layout = QVBoxLayout()
-            layout.addWidget(self.view)
-            self.setLayout(layout)
-            print(f"PDF loaded from {pdf_path}")
         
+        def show(self):
+            super().show()
+            print("Case brief manager opened")
 
+    class SettingsWindow(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle("Settings")
+            self.setGeometry(150, 150, 400, 300)
+            layout = QVBoxLayout()
+            classes_label = QLabel("Classes:")
+            layout.addWidget(classes_label)
+            classes_combo = QComboBox()
+            classes_combo.addItems(["Class 1", "Class 2", "Class 3"])  # pyright: ignore[reportUnknownMemberType] # Example classes
+            layout.addWidget(classes_combo)
+            self.setLayout(layout)
+        
+        def show(self):
+            super().show()
+            print("Settings window opened")
 
     
     class CaseBriefApp(QMainWindow):
@@ -780,6 +793,10 @@ if __name__ == "__main__":
             render_pdf_button = QPushButton("Render PDF")
             render_pdf_button.clicked.connect(self.render_pdf) # pyright: ignore[reportUnknownMemberType]
             layout.addWidget(render_pdf_button, 2, 0, 1, 1)
+
+            settings_button = QPushButton("Settings")
+            settings_button.clicked.connect(self.open_settings) # pyright: ignore[reportUnknownMemberType]
+            layout.addWidget(settings_button, 3, 0, 1, 1)
 
             container = QWidget()
             container.setLayout(layout)
@@ -824,6 +841,12 @@ if __name__ == "__main__":
             QMessageBox.information(self, "PDF Rendered", f"PDF for {master_file} has been generated successfully.")
             shutil.move(f"./TMP/{master_file}.pdf", f"./{master_file}.pdf")
             # Here you would typically call the method to generate the PDF
+
+        def open_settings(self):
+            # Logic to open the settings window
+            print("Opening settings...")
+            self.settings = SettingsWindow()
+            self.settings.show()
         
     window = CaseBriefApp()
     window.show()
