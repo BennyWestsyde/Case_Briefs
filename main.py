@@ -26,6 +26,11 @@ import os
 import shutil
 import sys
 import re
+from PyQt6.QtWidgets import (
+    QScrollArea, QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
+)
+from PyQt6.QtCore import QUrl, QProcess
+from PyQt6.QtGui import QDesktopServices
 
 global master_file
 master_file = "CaseBriefs"
@@ -271,7 +276,7 @@ class CaseBrief:
         if os.path.exists(pdf_file):
             os.remove(pdf_file)
         try:
-            process = QProcess()
+            process: QProcess = QProcess()
             process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
             if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
@@ -374,11 +379,7 @@ class CaseBriefs:
         return f"CITE({case_brief_label})"  # Fallback if case brief not found
             
             
-from PyQt6.QtWidgets import (
-    QScrollArea, QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
-)
-from PyQt6.QtCore import QUrl, QProcess
-from PyQt6.QtGui import QDesktopServices
+
 
 
 def reload_subjects(case_briefs: list[CaseBrief]) -> list[Subject]:
