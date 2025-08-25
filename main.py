@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QUrl, QProcess
 from PyQt6.QtGui import QDesktopServices
+import sqlite3
 
 global master_file
 master_file = "CaseBriefs"
@@ -87,7 +88,7 @@ class CaseBrief:
     """
     A class to manage case briefs.
     
-    :param subject: A tuple of Subject objects representing the legal subjects of the case.
+    :param subject: A list of Subject objects representing the legal subjects of the case.
     :param plaintiff: The name of the plaintiff in the case.
     :param defendant: The name of the defendant in the case.
     :param citation: The citation of the case, including the year.
@@ -103,7 +104,7 @@ class CaseBrief:
     :param notes: A string containing any additional notes about the case.
     """
     def __init__(self, 
-                 subject: tuple[Subject,...],
+                 subject: list[Subject],
                  plaintiff: str,
                  defendant: str,
                  citation: str,
@@ -120,8 +121,6 @@ class CaseBrief:
         self.subject = subject
         self.plaintiff = plaintiff
         self.defendant = defendant
-        self.title = f"{plaintiff} v. {defendant}"
-        self.filename = f"{plaintiff}_V_{defendant}".replace(" ", "_")
         self.course = course
         self.citation = citation
         self.facts = facts
@@ -138,19 +137,17 @@ class CaseBrief:
     def title(self):
         return f"{self.plaintiff} v. {self.defendant}"
 
-    @title.setter
-    def title(self, value: str):
-        """Set the title of the case brief."""
-        self.plaintiff, self.defendant = value.split(" v. ")
-        self.filename = f"{self.plaintiff}_V_{self.defendant}".replace(" ", "_")
+    @property
+    def filename(self):
+        return f"{self.plaintiff}_V_{self.defendant}".replace(" ", "_")
 
     def add_subject(self, subject: Subject):
         """Add a subject to the case brief."""
-        self.subject += (subject,)
+        self.subject.append(subject)
 
     def remove_subject(self, subject: Subject):
         """Remove a subject from the case brief."""
-        self.subject = tuple(s for s in self.subject if s != subject)
+        self.subject = [s for s in self.subject if s != subject]
 
     def update_subject(self, old_subject: Subject, new_subject: Subject):
         """Update a subject in the case brief."""
@@ -262,7 +259,63 @@ class CaseBrief:
                opinions_str,
                self.label,
                notes_str)
-        
+    
+    def to_sql(self):
+        conn = sqlite3.connect('SQL/Cases.sqlite')
+        curr = conn.cursor()
+        try:
+            # Insert or update the main case brief information
+            curr.execute("""
+                INSERT INTO CaseBriefs (label, title, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(label) DO UPDATE SET
+                    title=excluded.title,
+                    plaintiff=excluded.plaintiff,
+                    defendant=excluded.defendant,
+                    citation=excluded.citation,
+                    course=excluded.course,
+                    facts=excluded.facts,
+                    procedure=excluded.procedure,
+                    issue=excluded.issue,
+                    holding=excluded.holding,
+                    principle=excluded.principle,
+                    reasoning=excluded.reasoning,
+                    notes=excluded.notes
+            """, (
+                self.label,
+                self.title,
+                self.plaintiff,
+                self.defendant,
+                self.citation,
+                self.course,
+                self.facts,
+                self.procedure,
+                self.issue,
+                self.holding,
+                self.principle,
+                self.reasoning,
+                self.notes
+            ))
+
+            # Clear existing subjects and opinions
+            curr.execute("DELETE FROM CaseSubjects WHERE case_label = ?", (self.label,))
+            curr.execute("DELETE FROM CaseOpinions WHERE case_label = ?", (self.label,))
+
+            # Insert subjects
+            for subject in self.subject:
+                curr.execute("INSERT INTO CaseSubjects (case_label, subject_name) VALUES (?, ?)", (self.label, subject.name))
+
+            # Insert opinions
+            for opinion in self.opinions:
+                curr.execute("INSERT INTO CaseOpinions (case_label, author, text) VALUES (?, ?, ?)", (self.label, opinion.author, opinion.text))
+
+            conn.commit()
+        except sqlite3.Error as e:
+            conn.rollback()
+            print(f"Error saving case brief to database: {e}")
+        finally:
+            conn.close()
+
     def save_to_file(self, filename: str):
         """Save the LaTeX representation of the case brief to a file."""
         with open(filename, 'w') as f:
@@ -301,7 +354,7 @@ class CaseBrief:
             regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}'
             match = re.search(regex, content, re.DOTALL)
             if match:
-                subjects = tuple(Subject(s.strip()) for s in match.group(1).split(',') if s.strip())
+                subjects = [Subject(s.strip()) for s in match.group(1).split(',') if s.strip()]
                 plaintiff = match.group(2).strip()
                 defendant = match.group(3).strip()
                 citation = match.group(4).strip()
@@ -327,6 +380,34 @@ class CaseBrief:
 
             return CaseBrief(subjects, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, opinions, label, notes)
 
+    @staticmethod
+    def load_from_sql(case_label: str):
+        conn = sqlite3.connect('SQL/Cases.sqlite')
+        curr = conn.cursor()
+        curr.execute("SELECT * FROM Cases WHERE label = ?", (case_label,))
+        cur_case = curr.fetchone()
+        if not cur_case:
+            raise RuntimeError(f"No case brief found with label '{case_label}' in the database.")
+        curr.execute("SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?", (case_label,))
+        opinions = [Opinion(*opinion) for opinion in curr.fetchall()]
+        curr.execute("SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?", (case_label,))
+        subjects = [Subject(subject[-1]) for subject in curr.fetchall()]
+        # Assuming the database schema matches the order of fields in CaseBrief
+        case_brief = CaseBrief(subject=subjects,
+                               opinions=opinions,
+                               plaintiff=cur_case[1],
+                               defendant=cur_case[2],
+                               citation=cur_case[3],
+                               course=cur_case[4],
+                               facts=cur_case[5],
+                               procedure=cur_case[6],
+                               issue=cur_case[7],
+                               holding=cur_case[8],
+                               principle=cur_case[9],
+                               reasoning=cur_case[10],
+                               label=Label(cur_case[11]),
+                               notes=cur_case[12])
+        return case_brief
 
     def render_pdf(self):
         pass
@@ -378,7 +459,7 @@ class CaseBriefs:
                 return f"\\hyperref[case:{case_brief.label.text}]"+ "{\\textit{" + case_brief.title + "}}"
         return f"CITE({case_brief_label})"  # Fallback if case brief not found
     
-    def load_case_briefs(self, path: str):
+    def load_cases_tex(self, path: str):
         """Load all case briefs from the specified directory."""
         for filename in os.listdir(path):
             if filename.endswith(".tex"):
@@ -388,7 +469,18 @@ class CaseBriefs:
                     print(f"Adding case brief: {brief.title}")
                     self.case_briefs.append(brief)
 
-
+    def load_cases_sql(self):
+        conn = sqlite3.connect('SQL/Cases.sqlite')
+        curr = conn.cursor()
+        curr.execute("SELECT label FROM Cases")
+        labels = [Label(row[0]) for row in curr.fetchall()]
+        for label in labels:
+            self.add_case_brief(CaseBrief.load_from_sql(label.text))
+        conn.close()
+    
+    def save_cases_sql(self):
+        for case in self.case_briefs:
+            case.to_sql()
 
 def reload_subjects(case_briefs: list[CaseBrief]) -> list[Subject]:
         subjects: list[Subject] = []    
@@ -578,7 +670,7 @@ if __name__ == "__main__":
                         opinions.append(Opinion(person.strip(), text.strip()))
             
             case_brief = CaseBrief(
-                subject=tuple(Subject(s) for s in subjects),
+                subject=[Subject(s) for s in subjects],
                 plaintiff=plaintiff,
                 defendant=defendant,
                 citation=citation,
@@ -687,7 +779,7 @@ if __name__ == "__main__":
             self.creator.holding_entry.setText(case_brief.holding)
             self.creator.principle_entry.setText(case_brief.principle)
             self.creator.reasoning_entry.setText(case_brief.reasoning)
-            opinions_str = '\n'.join(f"{op.person}: {op.text}" for op in case_brief.opinions)
+            opinions_str = '\n'.join(f"{op.author}: {op.text}" for op in case_brief.opinions)
             self.creator.opinions_entry.setText(opinions_str)
             self.creator.label_entry.setText(case_brief.label.text)
             # Disable the label entry to prevent changing it
