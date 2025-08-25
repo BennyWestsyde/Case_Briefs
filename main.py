@@ -76,12 +76,12 @@ class Label:
     
 class Opinion:
     """A class to represent a court opinion."""
-    def __init__(self, person: str, text: str):
-        self.person = person
+    def __init__(self, author: str, text: str):
+        self.author = author
         self.text = text
         
     def __str__(self):
-        return f"{self.person}: {self.text}\n"
+        return f"{self.author}: {self.text}\n"
 
 class CaseBrief:
     """
@@ -377,8 +377,16 @@ class CaseBriefs:
             if case_brief.label == case_brief_label:
                 return f"\\hyperref[case:{case_brief.label.text}]"+ "{\\textit{" + case_brief.title + "}}"
         return f"CITE({case_brief_label})"  # Fallback if case brief not found
-            
-            
+    
+    def load_case_briefs(self, path: str):
+        """Load all case briefs from the specified directory."""
+        for filename in os.listdir(path):
+            if filename.endswith(".tex"):
+                full_path = os.path.join(path, filename)
+                brief = CaseBrief.load_from_file(full_path)
+                if brief not in self.case_briefs:
+                    print(f"Adding case brief: {brief.title}")
+                    self.case_briefs.append(brief)
 
 
 
