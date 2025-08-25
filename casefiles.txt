@@ -1,3 +1,4 @@
+./Cases/Big_Town_Nursing_Home,_Inc_V_Newman.tex
 ./Cases/Brown_V_Kendall.tex
 ./Cases/Cohen_V_Petty.tex
 ./Cases/Fisher_V_Carrousel_Moter_Hotel,_Inc.tex
@@ -7,6 +8,7 @@
 ./Cases/Lucy_V_Zehmer.tex
 ./Cases/McGuire_V_Almy.tex
 ./Cases/Meyer_V_Uber_Technologies,_Inc.tex
+./Cases/Parvi_V_City_of_Kingston.tex
 ./Cases/Ranson_V_Kitner.tex
 ./Cases/Spano_V_Perini_Corp.tex
 ./Cases/Stepp_V_Freeman.tex
