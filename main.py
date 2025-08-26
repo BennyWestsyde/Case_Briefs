@@ -36,6 +36,20 @@ import sqlite3
 global master_file
 master_file = "CaseBriefs"
 
+def tex_escape(input:str) -> str:
+    """Escape special characters for LaTeX."""
+    replacements = {
+        '{': '\\{',
+        '}': '\\}',
+        '$': '\\$',
+        '&': '\\&',
+        '%': '\\%',
+        '#': '\\#',
+        '_': '\\_',
+        '~': '\\textasciitilde{}',
+        '^': '\\textasciicircum{}'
+    }
+    return str.translate(input, str.maketrans(replacements)).replace('\n', r'\\')
 
 class Subject:
     """A class to represent a legal subject."""
@@ -151,8 +165,8 @@ class CaseBrief:
 
     def update_subject(self, old_subject: Subject, new_subject: Subject):
         """Update a subject in the case brief."""
-        self.subject = tuple(new_subject if s == old_subject else s for s in self.subject)
-        
+        self.subject = [new_subject if s == old_subject else s for s in self.subject]
+
     def update_plaintiff(self, plaintiff: str):
         """Update the plaintiff in the case brief."""
         self.plaintiff = plaintiff
@@ -213,16 +227,16 @@ class CaseBrief:
         """Generate a LaTeX representation of the case brief."""
         subjects_str = ', '.join(str(s) for s in self.subject)
         opinions_str = ('\n').join(str(op) for op in self.opinions)
-        opinions_str = opinions_str.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        opinions_str = tex_escape(opinions_str)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         opinions_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), opinions_str)
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
-        facts_str = self.facts.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        facts_str = tex_escape(self.facts)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         facts_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), facts_str)
-        procedure_str = self.procedure.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        procedure_str = tex_escape(self.procedure)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), procedure_str)
-        issue_str = self.issue.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        issue_str = tex_escape(self.issue)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), issue_str)
-        notes_str = self.notes.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        notes_str = tex_escape(self.notes)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), notes_str)
 
         return """
@@ -262,6 +276,7 @@ class CaseBrief:
     
     def to_sql(self):
         conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         try:
             # Insert or update the main case brief information
@@ -307,21 +322,21 @@ class CaseBrief:
                 subject_id = curr.fetchone()
                 if not subject_id:
                     curr.execute("INSERT INTO Subjects (name) VALUES (?)", (subject.name,))
-                    subject_id = curr.lastrowid
-                else:
-                    subject_id = subject_id[0]
+                    curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
+                    subject_id = curr.fetchone()
+                subject_id = subject_id[0]
                 curr.execute("INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)", (self.label.text, subject_id,))
 
             # Insert opinions
             for opinion in self.opinions:
                 print("Saving Opinion By: ", opinion.author)
-                curr.execute("SELECT id FROM Opinions where text = ?", opinion.text)
+                curr.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
                 opinion_id = curr.fetchone()
                 if not opinion_id:
-                    curr.execute("INSERT INTO Opinions (author, text) VALUES (?, ?)", (opinion.author, opinion.text,))
-                    opinion_id = curr.lastrowid
-                else:
-                    opinion_id = opinion_id[0]
+                    curr.execute("INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)", (opinion.author, opinion.text,))
+                    curr.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
+                    opinion_id = curr.fetchone()
+                opinion_id = opinion_id[0]
                 curr.execute("INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)", (self.label.text, opinion_id))
 
             conn.commit()
@@ -398,8 +413,9 @@ class CaseBrief:
     @staticmethod
     def load_from_sql(case_label: str):
         conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
-        curr.execute("SELECT * FROM Cases WHERE label = ?", (case_label,))
+        curr.execute("SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?", (case_label,))
         cur_case = curr.fetchone()
         if not cur_case:
             raise RuntimeError(f"No case brief found with label '{case_label}' in the database.")
@@ -410,18 +426,18 @@ class CaseBrief:
         # Assuming the database schema matches the order of fields in CaseBrief
         case_brief = CaseBrief(subject=subjects,
                                opinions=opinions,
-                               plaintiff=cur_case[1],
-                               defendant=cur_case[2],
-                               citation=cur_case[3],
-                               course=cur_case[4],
-                               facts=cur_case[5],
-                               procedure=cur_case[6],
-                               issue=cur_case[7],
-                               holding=cur_case[8],
-                               principle=cur_case[9],
-                               reasoning=cur_case[10],
-                               label=Label(cur_case[11]),
-                               notes=cur_case[12])
+                               plaintiff=cur_case[0],
+                               defendant=cur_case[1],
+                               citation=cur_case[2],
+                               course=cur_case[3],
+                               facts=cur_case[4],
+                               procedure=cur_case[5],
+                               issue=cur_case[6],
+                               holding=cur_case[7],
+                               principle=cur_case[8],
+                               reasoning=cur_case[9],
+                               label=Label(cur_case[10]),
+                               notes=cur_case[11])
         return case_brief
 
     def render_pdf(self):
@@ -437,7 +453,7 @@ class CaseBriefs:
     def __init__(self):
         self.case_briefs: list[CaseBrief] = []
 
-    def reload_cases(self):
+    def reload_cases_tex(self):
         """Reload all case briefs from the ./Cases directory."""
         for filename in os.listdir("./Cases"):
             if filename.endswith(".tex"):
@@ -445,6 +461,19 @@ class CaseBriefs:
                 if brief not in self.case_briefs:
                     print(f"Adding case brief: {brief.title}")
                     self.case_briefs.append(brief)
+
+    def reload_cases_sql(self):
+        """Reload all case briefs from the SQL database."""
+        conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn.execute("PRAGMA foreign_keys = ON")
+        curr = conn.cursor()
+        curr.execute("SELECT label FROM Cases")
+        labels = [Label(row[0]) for row in curr.fetchall()]
+        for label in labels:
+            case_brief = CaseBrief.load_from_sql(label.text)
+            if case_brief not in self.case_briefs:
+                self.add_case_brief(case_brief)
+        conn.close()
 
     def add_case_brief(self, case_brief: CaseBrief):
         """Add a case brief to the collection."""
@@ -486,6 +515,7 @@ class CaseBriefs:
 
     def load_cases_sql(self):
         conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         curr.execute("SELECT label FROM Cases")
         labels = [Label(row[0]) for row in curr.fetchall()]
@@ -516,7 +546,7 @@ def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
 class CaseBriefCreator(QWidget):
         def __init__(self):
             super().__init__()
-            case_briefs.reload_cases()
+            case_briefs.reload_cases_sql()
 
             subjects = reload_subjects(case_briefs.get_case_briefs())
 
@@ -669,10 +699,11 @@ class CaseBriefCreator(QWidget):
 
             opinions: list[Opinion] = []
             if opinions_str:
-                for opinion in opinions_str.split(','):
-                    if ':' in opinion:
-                        person, text = opinion.split(':', 1)
+                for line in opinions_str.splitlines():
+                    if ':' in line:
+                        person, text = line.split(':', 1)
                         opinions.append(Opinion(person.strip(), text.strip()))
+
             
             case_brief = CaseBrief(
                 subject=[Subject(s) for s in subjects],
@@ -709,7 +740,7 @@ class CaseBriefManager(QWidget):
     """
     def __init__(self):
         super().__init__()
-        case_briefs.reload_cases()
+        case_briefs.reload_cases_sql()
 
         self.setWindowTitle("Case Brief Manager")
         self.setGeometry(100, 100, 600, 400)
@@ -755,6 +786,9 @@ class CaseBriefManager(QWidget):
 
     def view_case_brief(self, case_brief: CaseBrief):
         pdf_path = case_brief.compile_to_pdf()
+        if not pdf_path or not os.path.exists(pdf_path):
+            QMessageBox.critical(self, "Error", "Failed to compile PDF. Check LaTeX output.")
+            return
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
 
 
@@ -845,7 +879,7 @@ class CaseBriefManager(QWidget):
         case_brief.update_defendant(defendant)
         case_brief.update_citation(citation)
         case_brief.course = self.creator.class_selector.currentText()
-        case_brief.subject = tuple(Subject(s) for s in subjects)
+        case_brief.subject = [Subject(s) for s in subjects]
         case_brief.update_facts(facts)
         case_brief.update_procedure(procedure)
         case_brief.update_issue(issue)
