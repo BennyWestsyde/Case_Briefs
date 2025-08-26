@@ -116,6 +116,10 @@
 
 	% Title block
 	\begin{center}
+		\begin{large}
+			\textbf{\currentcourse}
+			\indexsubjects{\currentcourse}
+		\end{large}\\
 		\begin{Huge}
 			\currentplaintiff\ v.\ \currentdefendant
 		\end{Huge}\\
@@ -123,15 +127,6 @@
 			\currentcitation
 		\end{large}
 	\end{center}
-
-	% Display course
-	\section*{Course}
-	\ifblank{\currentcourse}{%
-			\textit{No course specified.}
-	}{
-		\currentcourse
-		\indexsubjects{\currentcourse}
-	}
 
 	% Display subject
 	\section*{Keyword Subject}
