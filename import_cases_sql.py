@@ -7,6 +7,7 @@ if __name__ == "__main__":
     connect = sqlite3.connect("SQL/Cases.sqlite")
     cursor = connect.cursor()
     cases = CaseBriefs()
+    cases.load_cases_sql()
     cases.load_cases_tex("Cases")
     for case in cases.case_briefs:
         # Load the Subjects into the database

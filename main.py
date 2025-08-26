@@ -266,10 +266,9 @@ class CaseBrief:
         try:
             # Insert or update the main case brief information
             curr.execute("""
-                INSERT INTO CaseBriefs (label, title, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO Cases (label, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(label) DO UPDATE SET
-                    title=excluded.title,
                     plaintiff=excluded.plaintiff,
                     defendant=excluded.defendant,
                     citation=excluded.citation,
@@ -282,8 +281,7 @@ class CaseBrief:
                     reasoning=excluded.reasoning,
                     notes=excluded.notes
             """, (
-                self.label,
-                self.title,
+                self.label.text,
                 self.plaintiff,
                 self.defendant,
                 self.citation,
@@ -298,16 +296,33 @@ class CaseBrief:
             ))
 
             # Clear existing subjects and opinions
-            curr.execute("DELETE FROM CaseSubjects WHERE case_label = ?", (self.label,))
-            curr.execute("DELETE FROM CaseOpinions WHERE case_label = ?", (self.label,))
+            print("Deleting existing subjects and opinions")
+            curr.execute("DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,))
+            curr.execute("DELETE FROM CaseOpinions WHERE case_label = ?", (self.label.text,))
 
             # Insert subjects
             for subject in self.subject:
-                curr.execute("INSERT INTO CaseSubjects (case_label, subject_name) VALUES (?, ?)", (self.label, subject.name))
+                print("Saving Subject: ", subject.name)
+                curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
+                subject_id = curr.fetchone()
+                if not subject_id:
+                    curr.execute("INSERT INTO Subjects (name) VALUES (?)", (subject.name,))
+                    subject_id = curr.lastrowid
+                else:
+                    subject_id = subject_id[0]
+                curr.execute("INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)", (self.label.text, subject_id,))
 
             # Insert opinions
             for opinion in self.opinions:
-                curr.execute("INSERT INTO CaseOpinions (case_label, author, text) VALUES (?, ?, ?)", (self.label, opinion.author, opinion.text))
+                print("Saving Opinion By: ", opinion.author)
+                curr.execute("SELECT id FROM Opinions where text = ?", opinion.text)
+                opinion_id = curr.fetchone()
+                if not opinion_id:
+                    curr.execute("INSERT INTO Opinions (author, text) VALUES (?, ?)", (opinion.author, opinion.text,))
+                    opinion_id = curr.lastrowid
+                else:
+                    opinion_id = opinion_id[0]
+                curr.execute("INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)", (self.label.text, opinion_id))
 
             conn.commit()
         except sqlite3.Error as e:
@@ -498,17 +513,7 @@ def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
     return labels
 # Start by finding and loading all of the case brief files in ./Cases
 
-global case_briefs, subjects, labels
-case_briefs = CaseBriefs()
-subjects = reload_subjects(case_briefs.get_case_briefs())
-labels = reload_labels(case_briefs.get_case_briefs())
-
-if __name__ == "__main__":
-    # Create a simple gui for the application
-
-    app = QApplication(sys.argv)
-    
-    class CaseBriefCreator(QWidget):
+class CaseBriefCreator(QWidget):
         def __init__(self):
             super().__init__()
             case_briefs.reload_cases()
@@ -689,6 +694,7 @@ if __name__ == "__main__":
             filename = f"./Cases/{case_brief.filename}.tex"
             case_brief.save_to_file(filename)
             case_briefs.add_case_brief(case_brief)
+            case_brief.to_sql()
             QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
             self.close()
 
@@ -696,261 +702,276 @@ if __name__ == "__main__":
             super().show()
             print("Case brief creation window opened")
 
-    class CaseBriefManager(QWidget):
-        """A window for managing existing case briefs.
-        This window should bring up a list of the existing case briefs, 
-        and allow the user to select one and search existing case briefs then edit them.
-        """
-        def __init__(self):
-            super().__init__()
-            case_briefs.reload_cases()
+class CaseBriefManager(QWidget):
+    """A window for managing existing case briefs.
+    This window should bring up a list of the existing case briefs, 
+    and allow the user to select one and search existing case briefs then edit them.
+    """
+    def __init__(self):
+        super().__init__()
+        case_briefs.reload_cases()
 
-            self.setWindowTitle("Case Brief Manager")
-            self.setGeometry(100, 100, 600, 400)
+        self.setWindowTitle("Case Brief Manager")
+        self.setGeometry(100, 100, 600, 400)
 
-            scrollable_area = QScrollArea(self)
-            scrollable_area.setWidgetResizable(True)
+        scrollable_area = QScrollArea(self)
+        scrollable_area.setWidgetResizable(True)
 
-            content_widget = QWidget()
-            content_layout = QGridLayout(content_widget)
-            scrollable_area.setWidget(content_widget)
+        content_widget = QWidget()
+        content_layout = QGridLayout(content_widget)
+        scrollable_area.setWidget(content_widget)
 
-            main_layout = QVBoxLayout(self)
-            main_layout.addWidget(scrollable_area)
-            
-            
-            # Add a search bar to search for case briefs
-            search_entry = QLineEdit()
-            search_entry.setPlaceholderText("Search case briefs...")
-            content_layout.addWidget(search_entry, 0, 0)
-            search_entry.textChanged.connect(self.filter_case_briefs) # pyright: ignore[reportUnknownMemberType]
-
-            for index, case_brief in enumerate(case_briefs.get_case_briefs()):
-                case_brief_item = QLabel(case_brief.title)
-                case_brief_edit_button = QPushButton("Edit")
-                case_brief_edit_button.clicked.connect(lambda _, cb=case_brief: self.edit_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-                case_brief_view_button = QPushButton("View")
-                case_brief_view_button.clicked.connect(lambda _, cb=case_brief: self.view_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
-                case_brief_item.setToolTip(f"Course: {case_brief.course}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subject)}\nLabel: {case_brief.label.text}")
-                content_layout.addWidget(case_brief_item, index + 1, 0)
-                content_layout.addWidget(case_brief_edit_button, index + 1, 1)
-                content_layout.addWidget(case_brief_view_button, index + 1, 2)
-
-            #self.setLayout(layout)
-            self.content_layout = content_layout # pyright: ignore[reportAttributeAccessIssue]
-            
-            # CaseBriefManager.__init__
-            self._pdf_windows = []  # keep viewers alive
-
-        def view_case_brief(self, case_brief: CaseBrief):
-            pdf_path = case_brief.compile_to_pdf()
-            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
-
-
-        def filter_case_briefs(self, text: str):
-            """Filter the case briefs based on the search text."""
-            for i in range(self.content_layout.rowCount()): # pyright: ignore[reportUnknownArgumentType, reportAttributeAccessIssue, reportUnknownMemberType]
-                item: QLayoutItem = self.content_layout.itemAtPosition(i, 0) # pyright: ignore[reportAssignmentType, reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
-                if item:
-                    widget: QWidget = item.widget() # pyright: ignore[reportUnknownVariableType, reportAssignmentType, reportUnknownMemberType]
-                    if isinstance(widget, QLabel):
-                        if text.lower() in widget.text().lower() or text.lower() in widget.toolTip().lower():
-                            widget.show()
-                            self.content_layout.itemAtPosition(i, 1).widget().show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
-                            self.content_layout.itemAtPosition(i, 2).widget().show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the view button as well
-                        else:
-                            widget.hide()
-                            self.content_layout.itemAtPosition(i, 1).widget().hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
-                            self.content_layout.itemAtPosition(i, 2).widget().hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the view button as well
-            
-        def edit_case_brief(self, case_brief: CaseBrief):
-            """View the details of a case brief."""
-            # Open the CaseBriefCreator window with the case brief details filled in
-            self.creator = CaseBriefCreator()
-            self.creator.plaintiff_entry.setText(case_brief.plaintiff)
-            self.creator.defendant_entry.setText(case_brief.defendant)
-            self.creator.citation_entry.setText(case_brief.citation)
-            self.creator.class_selector.setCurrentText(case_brief.course)
-            self.creator.current_subjects_str_list = [s.name for s in case_brief.subject]
-            self.creator.rerender_subjects_list()
-            self.creator.facts_entry.setPlainText(case_brief.facts)
-            self.creator.procedure_entry.setPlainText(case_brief.procedure)
-            self.creator.issue_entry.setPlainText(case_brief.issue)
-            self.creator.holding_entry.setText(case_brief.holding)
-            self.creator.principle_entry.setText(case_brief.principle)
-            self.creator.reasoning_entry.setText(case_brief.reasoning)
-            opinions_str = '\n'.join(f"{op.author}: {op.text}" for op in case_brief.opinions)
-            self.creator.opinions_entry.setText(opinions_str)
-            self.creator.label_entry.setText(case_brief.label.text)
-            # Disable the label entry to prevent changing it
-            self.creator.label_entry.setDisabled(True)
-            self.creator.notes_entry.setPlainText(case_brief.notes)
-            # Set the create button to update the existing case brief instead of creating a new one
-            self.creator.create_button.setText("Update Case Brief")
-            self.creator.create_button.clicked.disconnect() # pyright: ignore[reportUnknownMemberType]
-            self.creator.create_button.clicked.connect(lambda: self.update_case_brief( # pyright: ignore[reportUnknownMemberType]
-                case_brief,
-                self.creator.plaintiff_entry.text(),
-                self.creator.defendant_entry.text(),
-                self.creator.citation_entry.text(),
-                self.creator.current_subjects_str_list,
-                self.creator.facts_entry.toPlainText(),
-                self.creator.procedure_entry.toPlainText(),
-                self.creator.issue_entry.toPlainText(),
-                self.creator.holding_entry.text(),
-                self.creator.principle_entry.text(),
-                self.creator.reasoning_entry.toPlainText(),
-                self.creator.opinions_entry.toPlainText(),
-                self.creator.label_entry.text()  # This will not change
-            ))
-
-            self.creator.show()
-
-        def update_case_brief(self,
-                              case_brief: CaseBrief,
-                              plaintiff: str,
-                              defendant: str,
-                              citation: str,
-                              subjects: list[str],
-                              facts: str,
-                              procedure: str,
-                              issue: str,
-                              holding: str,
-                              principle: str,
-                              reasoning: str,
-                              opinions_str: str,
-                              label: str):
-            """Update an existing case brief and save it to a file."""
-            if not plaintiff or not defendant or not citation or not label:
-                QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation and Label cannot be empty.")
-                return
-            opinions: list[Opinion] = []
-            if opinions_str:
-                for opinion in opinions_str.split(','):
-                    if ':' in opinion:
-                        person, text = opinion.split(':', 1)
-                        opinions.append(Opinion(person.strip(), text.strip()))
-            case_brief.update_plaintiff(plaintiff)
-            case_brief.update_defendant(defendant)
-            case_brief.update_citation(citation)
-            case_brief.course = self.creator.class_selector.currentText()
-            case_brief.subject = tuple(Subject(s) for s in subjects)
-            case_brief.update_facts(facts)
-            case_brief.update_procedure(procedure)
-            case_brief.update_issue(issue)
-            case_brief.update_holding(holding)
-            case_brief.update_principle(principle)
-            case_brief.update_reasoning(reasoning)
-            case_brief.opinions = opinions
-            # Label does not change
-            filename = f"./Cases/{case_brief.filename}.tex"
-            case_brief.save_to_file(filename)
-            case_briefs.update_case_brief(case_brief)
-            QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
-            self.creator.close()
-            self.close()
+        main_layout = QVBoxLayout(self)
+        main_layout.addWidget(scrollable_area)
         
-        def show(self):
-            super().show()
-            print("Case brief manager opened")
-
-    class SettingsWindow(QWidget):
-        def __init__(self):
-            super().__init__()
-            self.setWindowTitle("Settings")
-            self.setGeometry(150, 150, 400, 300)
-            layout = QVBoxLayout()
-            classes_label = QLabel("Classes:")
-            layout.addWidget(classes_label)
-            classes_combo = QComboBox()
-            classes_combo.addItems(["Class 1", "Class 2", "Class 3"])  # pyright: ignore[reportUnknownMemberType] # Example classes
-            layout.addWidget(classes_combo)
-            self.setLayout(layout)
         
-        def show(self):
-            super().show()
-            print("Settings window opened")
+        # Add a search bar to search for case briefs
+        search_entry = QLineEdit()
+        search_entry.setPlaceholderText("Search case briefs...")
+        content_layout.addWidget(search_entry, 0, 0)
+        search_entry.textChanged.connect(self.filter_case_briefs) # pyright: ignore[reportUnknownMemberType]
+        class_dropdown = QComboBox()
+        class_dropdown.setPlaceholderText("Select a class...")
+        class_dropdown.addItems(["All", "Torts", "Contracts", "Civil Procedure"])
+        class_dropdown.currentIndexChanged.connect(lambda: self.filter_case_briefs(class_dropdown.currentText() if class_dropdown.currentText() != "All" else ""))
+        content_layout.addWidget(class_dropdown, 0, 1, 1, 2) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
 
+        for index, case_brief in enumerate(case_briefs.get_case_briefs()):
+            case_brief_item = QLabel(case_brief.title)
+            case_brief_edit_button = QPushButton("Edit")
+            case_brief_edit_button.clicked.connect(lambda _, cb=case_brief: self.edit_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            case_brief_view_button = QPushButton("View")
+            case_brief_view_button.clicked.connect(lambda _, cb=case_brief: self.view_case_brief(cb)) # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+            case_brief_item.setToolTip(f"Course: {case_brief.course}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subject)}\nLabel: {case_brief.label.text}")
+            content_layout.addWidget(case_brief_item, index + 1, 0)
+            content_layout.addWidget(case_brief_edit_button, index + 1, 1)
+            content_layout.addWidget(case_brief_view_button, index + 1, 2)
+
+        #self.setLayout(layout)
+        self.content_layout = content_layout # pyright: ignore[reportAttributeAccessIssue]
+        
+        # CaseBriefManager.__init__
+        self._pdf_windows = []  # keep viewers alive
+
+    def view_case_brief(self, case_brief: CaseBrief):
+        pdf_path = case_brief.compile_to_pdf()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
+
+
+    def filter_case_briefs(self, text: str):
+        """Filter the case briefs based on the search text."""
+        for i in range(self.content_layout.rowCount()): # pyright: ignore[reportUnknownArgumentType, reportAttributeAccessIssue, reportUnknownMemberType]
+            item: QLayoutItem = self.content_layout.itemAtPosition(i, 0) # pyright: ignore[reportAssignmentType, reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
+            if item:
+                widget: QWidget = item.widget() # pyright: ignore[reportUnknownVariableType, reportAssignmentType, reportUnknownMemberType]
+                if isinstance(widget, QLabel):
+                    if text.lower() in widget.text().lower() or text.lower() in widget.toolTip().lower():
+                        widget.show()
+                        self.content_layout.itemAtPosition(i, 1).widget().show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
+                        self.content_layout.itemAtPosition(i, 2).widget().show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the view button as well
+                    else:
+                        widget.hide()
+                        self.content_layout.itemAtPosition(i, 1).widget().hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
+                        self.content_layout.itemAtPosition(i, 2).widget().hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the view button as well
+        
+    def edit_case_brief(self, case_brief: CaseBrief):
+        """View the details of a case brief."""
+        # Open the CaseBriefCreator window with the case brief details filled in
+        self.creator = CaseBriefCreator()
+        self.creator.plaintiff_entry.setText(case_brief.plaintiff)
+        self.creator.defendant_entry.setText(case_brief.defendant)
+        self.creator.citation_entry.setText(case_brief.citation)
+        self.creator.class_selector.setCurrentText(case_brief.course)
+        self.creator.current_subjects_str_list = [s.name for s in case_brief.subject]
+        self.creator.rerender_subjects_list()
+        self.creator.facts_entry.setPlainText(case_brief.facts)
+        self.creator.procedure_entry.setPlainText(case_brief.procedure)
+        self.creator.issue_entry.setPlainText(case_brief.issue)
+        self.creator.holding_entry.setText(case_brief.holding)
+        self.creator.principle_entry.setText(case_brief.principle)
+        self.creator.reasoning_entry.setText(case_brief.reasoning)
+        opinions_str = '\n'.join(f"{op.author}: {op.text}" for op in case_brief.opinions)
+        self.creator.opinions_entry.setText(opinions_str)
+        self.creator.label_entry.setText(case_brief.label.text)
+        # Disable the label entry to prevent changing it
+        self.creator.label_entry.setDisabled(True)
+        self.creator.notes_entry.setPlainText(case_brief.notes)
+        # Set the create button to update the existing case brief instead of creating a new one
+        self.creator.create_button.setText("Update Case Brief")
+        self.creator.create_button.clicked.disconnect() # pyright: ignore[reportUnknownMemberType]
+        self.creator.create_button.clicked.connect(lambda: self.update_case_brief( # pyright: ignore[reportUnknownMemberType]
+            case_brief,
+            self.creator.plaintiff_entry.text(),
+            self.creator.defendant_entry.text(),
+            self.creator.citation_entry.text(),
+            self.creator.current_subjects_str_list,
+            self.creator.facts_entry.toPlainText(),
+            self.creator.procedure_entry.toPlainText(),
+            self.creator.issue_entry.toPlainText(),
+            self.creator.holding_entry.text(),
+            self.creator.principle_entry.text(),
+            self.creator.reasoning_entry.toPlainText(),
+            self.creator.opinions_entry.toPlainText(),
+            self.creator.label_entry.text()  # This will not change
+        ))
+
+        self.creator.show()
+
+    def update_case_brief(self,
+                            case_brief: CaseBrief,
+                            plaintiff: str,
+                            defendant: str,
+                            citation: str,
+                            subjects: list[str],
+                            facts: str,
+                            procedure: str,
+                            issue: str,
+                            holding: str,
+                            principle: str,
+                            reasoning: str,
+                            opinions_str: str,
+                            label: str):
+        """Update an existing case brief and save it to a file."""
+        if not plaintiff or not defendant or not citation or not label:
+            QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation and Label cannot be empty.")
+            return
+        opinions: list[Opinion] = []
+        if opinions_str:
+            for opinion in opinions_str.split(','):
+                if ':' in opinion:
+                    person, text = opinion.split(':', 1)
+                    opinions.append(Opinion(person.strip(), text.strip()))
+        case_brief.update_plaintiff(plaintiff)
+        case_brief.update_defendant(defendant)
+        case_brief.update_citation(citation)
+        case_brief.course = self.creator.class_selector.currentText()
+        case_brief.subject = tuple(Subject(s) for s in subjects)
+        case_brief.update_facts(facts)
+        case_brief.update_procedure(procedure)
+        case_brief.update_issue(issue)
+        case_brief.update_holding(holding)
+        case_brief.update_principle(principle)
+        case_brief.update_reasoning(reasoning)
+        case_brief.opinions = opinions
+        case_brief.to_sql()
+        # Label does not change
+        filename = f"./Cases/{case_brief.filename}.tex"
+        case_brief.save_to_file(filename)
+        case_briefs.update_case_brief(case_brief)
+        QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
+        self.creator.close()
+        self.close()
     
-    class CaseBriefApp(QMainWindow):
-        def __init__(self):
-            super().__init__()
-            self.setWindowTitle("Case Briefs Manager")
-            self.setGeometry(100, 100, 600, 400)
-            
-            layout = QGridLayout()
-            new_case_brief_button = QPushButton("Create Case Brief")
-            new_case_brief_button.clicked.connect(self.create_case_brief) # pyright: ignore[reportUnknownMemberType]
-            layout.addWidget(new_case_brief_button, 0, 0, 1, 1)
+    def show(self):
+        super().show()
+        print("Case brief manager opened")
 
-            view_case_briefs_button = QPushButton("View Case Briefs")
-            view_case_briefs_button.clicked.connect(self.view_case_briefs) # pyright: ignore[reportUnknownMemberType]
-            layout.addWidget(view_case_briefs_button, 1, 0, 1, 1)
+class SettingsWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Settings")
+        self.setGeometry(150, 150, 400, 300)
+        layout = QVBoxLayout()
+        classes_label = QLabel("Classes:")
+        layout.addWidget(classes_label)
+        classes_combo = QComboBox()
+        classes_combo.addItems(["Class 1", "Class 2", "Class 3"])  # pyright: ignore[reportUnknownMemberType] # Example classes
+        layout.addWidget(classes_combo)
+        self.setLayout(layout)
+    
+    def show(self):
+        super().show()
+        print("Settings window opened")
 
-            render_pdf_button = QPushButton("Render PDF")
-            render_pdf_button.clicked.connect(self.render_pdf) # pyright: ignore[reportUnknownMemberType]
-            layout.addWidget(render_pdf_button, 2, 0, 1, 1)
 
-            settings_button = QPushButton("Settings")
-            settings_button.clicked.connect(self.open_settings) # pyright: ignore[reportUnknownMemberType]
-            layout.addWidget(settings_button, 3, 0, 1, 1)
-
-            container = QWidget()
-            container.setLayout(layout)
-            self.setCentralWidget(container)
+class CaseBriefApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Case Briefs Manager")
+        self.setGeometry(100, 100, 600, 400)
         
-        def create_case_brief(self):
-            # Logic to create a new case brief
-            print("Creating a new case brief...")
-            self.creator = CaseBriefCreator()
-            self.creator.show()
-            
-        def view_case_briefs(self):
-            # Logic to view existing case briefs
-            print("Viewing existing case briefs...")
-            self.manager = CaseBriefManager()
-            self.manager.show()
+        layout = QGridLayout()
+        new_case_brief_button = QPushButton("Create Case Brief")
+        new_case_brief_button.clicked.connect(self.create_case_brief) # pyright: ignore[reportUnknownMemberType]
+        layout.addWidget(new_case_brief_button, 0, 0, 1, 1)
 
-        def render_pdf(self):
-            # Logic to render the case brief as a PDF
-            print("Rendering PDF for the case brief...")
-            if not os.path.exists("./Cases"):
-                os.makedirs("./Cases")
-                QMessageBox.warning(self, "Error", "No case briefs found. Please create a case brief first.")
-                return
-            if not os.path.exists("./TMP"):
-                os.makedirs("./TMP")
-            if not os.path.exists(f"./{master_file}.tex"):
-                QMessageBox.warning(self, "Error", f"No case brief found with the name {master_file}. Please reinstall the application.")
-                return
-            try:
-                process = QProcess(self)
-                process.start("latexmk", [
-                    "-synctex=1",
-                    "-interaction=nonstopmode",
-                    "-file-line-error",
-                    "-pdf",
-                            "-shell-escape", 
-                            "-outdir=./TMP",
-                            f"./{master_file}.tex"])
-                process.waitForFinished()
-                if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
-                    error_output = process.readAllStandardError().data().decode()
-                    QMessageBox.critical(self, "LaTeX Error", error_output)
-                    return
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e))
-                return
-            QMessageBox.information(self, "PDF Rendered", f"PDF for {master_file} has been generated successfully.")
-            shutil.move(f"./TMP/{master_file}.pdf", f"./{master_file}.pdf")
-            # Here you would typically call the method to generate the PDF
+        view_case_briefs_button = QPushButton("View Case Briefs")
+        view_case_briefs_button.clicked.connect(self.view_case_briefs) # pyright: ignore[reportUnknownMemberType]
+        layout.addWidget(view_case_briefs_button, 1, 0, 1, 1)
 
-        def open_settings(self):
-            # Logic to open the settings window
-            print("Opening settings...")
-            self.settings = SettingsWindow()
-            self.settings.show()
+        render_pdf_button = QPushButton("Render PDF")
+        render_pdf_button.clicked.connect(self.render_pdf) # pyright: ignore[reportUnknownMemberType]
+        layout.addWidget(render_pdf_button, 2, 0, 1, 1)
+
+        settings_button = QPushButton("Settings")
+        settings_button.clicked.connect(self.open_settings) # pyright: ignore[reportUnknownMemberType]
+        layout.addWidget(settings_button, 3, 0, 1, 1)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+    
+    def create_case_brief(self):
+        # Logic to create a new case brief
+        print("Creating a new case brief...")
+        self.creator = CaseBriefCreator()
+        self.creator.show()
         
+    def view_case_briefs(self):
+        # Logic to view existing case briefs
+        print("Viewing existing case briefs...")
+        self.manager = CaseBriefManager()
+        self.manager.show()
+
+    def render_pdf(self):
+        # Logic to render the case brief as a PDF
+        print("Rendering PDF for the case brief...")
+        if not os.path.exists("./Cases"):
+            os.makedirs("./Cases")
+            QMessageBox.warning(self, "Error", "No case briefs found. Please create a case brief first.")
+            return
+        if not os.path.exists("./TMP"):
+            os.makedirs("./TMP")
+        if not os.path.exists(f"./{master_file}.tex"):
+            QMessageBox.warning(self, "Error", f"No case brief found with the name {master_file}. Please reinstall the application.")
+            return
+        try:
+            process = QProcess(self)
+            process.start("latexmk", [
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "-pdf",
+                        "-shell-escape", 
+                        "-outdir=./TMP",
+                        f"./{master_file}.tex"])
+            process.waitForFinished()
+            if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
+                error_output = process.readAllStandardError().data().decode()
+                QMessageBox.critical(self, "LaTeX Error", error_output)
+                return
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+            return
+        QMessageBox.information(self, "PDF Rendered", f"PDF for {master_file} has been generated successfully.")
+        shutil.move(f"./TMP/{master_file}.pdf", f"./{master_file}.pdf")
+        # Here you would typically call the method to generate the PDF
+
+    def open_settings(self):
+        # Logic to open the settings window
+        print("Opening settings...")
+        self.settings = SettingsWindow()
+        self.settings.show()
+
+global case_briefs, subjects, labels
+case_briefs = CaseBriefs()
+subjects = reload_subjects(case_briefs.get_case_briefs())
+labels = reload_labels(case_briefs.get_case_briefs())
+
+if __name__ == "__main__":
+    # Create a simple gui for the application
+
+    app = QApplication(sys.argv)
     window = CaseBriefApp()
     window.show()
     sys.exit(app.exec())
