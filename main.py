@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QGridLayout, QLayoutItem, QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QListWidget, QLineEdit, QLabel, QMessageBox, QComboBox, QTextEdit
 )
 from PyQt6.QtCore import QUrl, QProcess
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QIcon
 import sqlite3
 from cleanup import clean_dir
 
@@ -658,6 +658,7 @@ class CaseBriefCreator(QWidget):
             ) if self.verify_label(self.label_entry.text()) else None)
             self.content_layout.addWidget(self.create_button, 13, 0, 1, 3) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.setLayout(self.content_layout) # pyright: ignore[reportArgumentType]
+            self.setWindowTitle("Case Briefs Creator")
             
         def add_subject(self, subject: str):
             """Add a subject to the case brief."""
@@ -795,6 +796,7 @@ class CaseBriefManager(QWidget):
             content_layout.addWidget(case_brief_item, index + 1, 0)
             content_layout.addWidget(case_brief_edit_button, index + 1, 1)
             content_layout.addWidget(case_brief_view_button, index + 1, 2)
+        self.setWindowTitle("Case Briefs Manager")
 
         #self.setLayout(layout)
         self.content_layout = content_layout # pyright: ignore[reportAttributeAccessIssue]
@@ -930,6 +932,7 @@ class SettingsWindow(QWidget):
         classes_combo.addItems(["Class 1", "Class 2", "Class 3"])  # pyright: ignore[reportUnknownMemberType] # Example classes
         layout.addWidget(classes_combo)
         self.setLayout(layout)
+        self.setWindowTitle("Case Briefs Settings")
     
     def show(self):
         super().show()
@@ -962,6 +965,7 @@ class CaseBriefApp(QMainWindow):
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+        self.setWindowTitle("Case Briefs App")
     
     def create_case_brief(self):
         # Logic to create a new case brief
@@ -1026,6 +1030,7 @@ if __name__ == "__main__":
     # Create a simple gui for the application
 
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon('ui/text.book.closed.png'))
     window = CaseBriefApp()
     window.show()
     sys.exit(app.exec())
