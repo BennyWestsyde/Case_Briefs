@@ -37,6 +37,14 @@ from cleanup import clean_dir
 global master_file
 master_file = "CaseBriefs"
 
+global base_dir
+base_dir = "."
+if getattr(sys, 'frozen', False):  # running as frozen
+    base_dir = sys._MEIPASS  # PyInstaller bundle dir for one-file, or internal dir for one-folder
+else:
+    base_dir = os.path.dirname(__file__)
+global db_path
+db_path = os.path.join(base_dir, 'SQL', 'Cases.sqlite')
 
 def tex_escape(input:str) -> str:
     """Escape special characters for LaTeX."""
@@ -238,8 +246,8 @@ class CaseBrief:
 
     def get_pdf_path(self) -> str:
         """Get the path to the PDF file for this case brief."""
-        return os.path.join("./Cases", f"{self.filename}.pdf")
-        
+        return os.path.join(base_dir, "Cases", f"{self.filename}.pdf")
+
     def to_latex(self) -> str:
         """Generate a LaTeX representation of the case brief."""
         citation_str = tex_escape(self.citation)
@@ -295,7 +303,7 @@ class CaseBrief:
                notes_str)
     
     def to_sql(self):
-        conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         try:
@@ -374,14 +382,14 @@ class CaseBrief:
 
     def compile_to_pdf(self):
         """Compile the LaTeX file to PDF."""
-        tex_file = f"./Cases/{self.filename}.tex"
+        tex_file = os.path.join(base_dir, "Cases", f"{self.filename}.tex")
         self.save_to_file(tex_file)
         pdf_file = self.get_pdf_path()
         if os.path.exists(pdf_file):
             os.remove(pdf_file)
         try:
             process: QProcess = QProcess()
-            process.start("./bin/tinitex", [tex_file])
+            process.start(os.path.join(base_dir, "bin", "tinitex"), [tex_file])
             #process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
             if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
@@ -389,7 +397,7 @@ class CaseBrief:
                 print(f"Error compiling {tex_file} to PDF: {error_output}")
                 return
             else:
-                clean_dir("./Cases")
+                clean_dir(os.path.join(base_dir, "Cases"))
             print(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
@@ -438,7 +446,7 @@ class CaseBrief:
     def load_from_sql(case_label: str):
         """Load a case brief from the SQL database by its label."""
         print(f"Loading case brief from SQL with label {case_label}")
-        conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         curr.execute("SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?", (case_label,))
@@ -478,16 +486,16 @@ class CaseBriefs:
 
     def reload_cases_tex(self):
         """Reload all case briefs from the ./Cases directory."""
-        for filename in os.listdir("./Cases"):
+        for filename in os.listdir(os.path.join(base_dir, "Cases")):
             if filename.endswith(".tex"):
-                brief = CaseBrief.load_from_file(os.path.join("./Cases", filename))
+                brief = CaseBrief.load_from_file(os.path.join(base_dir, "Cases", filename))
                 if brief not in self.case_briefs:
                     print(f"Adding case brief: {brief.title}")
                     self.case_briefs.append(brief)
 
     def reload_cases_sql(self):
         """Reload all case briefs from the SQL database."""
-        conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         curr.execute("SELECT label FROM Cases")
@@ -537,7 +545,7 @@ class CaseBriefs:
                     self.case_briefs.append(brief)
 
     def load_cases_sql(self):
-        conn = sqlite3.connect('SQL/Cases.sqlite')
+        conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         curr.execute("SELECT label FROM Cases")
@@ -918,7 +926,7 @@ class CaseBriefManager(QWidget):
         case_brief.opinions = opinions
         case_brief.to_sql()
         # Label does not change
-        filename = f"./Cases/{case_brief.filename}.tex"
+        filename = os.path.join(base_dir, "Cases", f"{case_brief.filename}.tex")
         case_brief.save_to_file(filename)
         case_briefs.update_case_brief(case_brief)
         QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
@@ -992,18 +1000,18 @@ class CaseBriefApp(QMainWindow):
     def render_pdf(self):
         # Logic to render the case brief as a PDF
         print("Rendering PDF for the case brief...")
-        if not os.path.exists("./Cases"):
-            os.makedirs("./Cases")
+        if not os.path.exists(os.path.join(base_dir, "Cases")):
+            os.makedirs(os.path.join(base_dir, "Cases"))
             QMessageBox.warning(self, "Error", "No case briefs found. Please create a case brief first.")
             return
-        if not os.path.exists("./TMP"):
-            os.makedirs("./TMP")
-        if not os.path.exists(f"./{master_file}.tex"):
+        if not os.path.exists(os.path.join(base_dir, "TMP")):
+            os.makedirs(os.path.join(base_dir, "TMP"))
+        if not os.path.exists(os.path.join(base_dir, f"{master_file}.tex")):
             QMessageBox.warning(self, "Error", f"No case brief found with the name {master_file}. Please reinstall the application.")
             return
         try:
             process = QProcess(self)
-            process.start("./bin/tinitex", ["--output-dir=./TMP", f"./{master_file}.tex"])
+            process.start(os.path.join(base_dir, "bin/tinitex"), ["--output-dir=./TMP", f"./{master_file}.tex"])
             """
             process.start("latexmk", [ # pyright: ignore[reportUnknownMemberType]
                         "-synctex=1",
@@ -1024,7 +1032,7 @@ class CaseBriefApp(QMainWindow):
             QMessageBox.critical(self, "Error", str(e))
             return
         QMessageBox.information(self, "PDF Rendered", f"PDF for {master_file} has been generated successfully.")
-        shutil.move(f"./TMP/{master_file}.pdf", f"./{master_file}.pdf")
+        shutil.move(os.path.join(base_dir, "TMP", f"{master_file}.pdf"), os.path.join("~","Downloads", f"{master_file}.pdf"))
         # Here you would typically call the method to generate the PDF
 
     def open_settings(self):
