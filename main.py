@@ -695,8 +695,8 @@ class CaseBriefCreator(QWidget):
                               label: str,
                               notes: str):
             """Create a new case brief and save it to a file."""
-            if not plaintiff or not defendant or not citation or not label:
-                QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation and Label cannot be empty.")
+            if not plaintiff or not defendant or not citation or not label or not course:
+                QMessageBox.warning(self, "Warning", "Plaintiff, Defendant, Citation, Label and Course cannot be empty.")
                 return
 
             opinions: list[Opinion] = []
@@ -974,10 +974,10 @@ class CaseBriefApp(QMainWindow):
         try:
             process = QProcess(self)
             process.start("latexmk", [ # pyright: ignore[reportUnknownMemberType]
-                "-synctex=1",
-                "-interaction=nonstopmode",
-                "-file-line-error",
-                "-pdf",
+                        "-synctex=1",
+                        "-interaction=nonstopmode",
+                        "-file-line-error",
+                        "-pdf",
                         "-shell-escape", 
                         "-outdir=./TMP",
                         f"./{master_file}.tex"])
