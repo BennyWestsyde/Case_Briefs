@@ -11,3 +11,6 @@
 /*.toc
 /*.synctex(busy)
 /TMP/*
+**.pyc
+/.vscode/*
+/__pycache__/*
