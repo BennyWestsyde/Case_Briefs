@@ -369,7 +369,8 @@ class CaseBrief:
         """Save the LaTeX representation of the case brief to a file."""
         with open(filename, 'w') as f:
             f.write(self.to_latex())
-    
+        print(f"Saved Latex to {filename}")
+
     def compile_to_pdf(self):
         """Compile the LaTeX file to PDF."""
         tex_file = f"./Cases/{self.filename}.tex"
@@ -433,6 +434,8 @@ class CaseBrief:
 
     @staticmethod
     def load_from_sql(case_label: str):
+        """Load a case brief from the SQL database by its label."""
+        print(f"Loading case brief from SQL with label {case_label}")
         conn = sqlite3.connect('SQL/Cases.sqlite')
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
@@ -746,6 +749,7 @@ class CaseBriefCreator(QWidget):
             case_briefs.add_case_brief(case_brief)
             case_brief.to_sql()
             QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
+            print(f"Case brief '{case_brief.title}' created successfully!")
             self.close()
 
         def show(self):
@@ -805,6 +809,8 @@ class CaseBriefManager(QWidget):
         self._pdf_windows = []  # keep viewers alive
 
     def view_case_brief(self, case_brief: CaseBrief):
+        """View the PDF of a case brief."""
+        print(f"Viewing case brief '{case_brief.title}'")
         pdf_path = case_brief.compile_to_pdf()
         if not pdf_path or not os.path.exists(pdf_path):
             QMessageBox.critical(self, "Error", "Failed to compile PDF. Check LaTeX output.")
@@ -870,6 +876,7 @@ class CaseBriefManager(QWidget):
         ))
 
         self.creator.show()
+        print(f"Editing case brief '{case_brief.title}'")
 
     def update_case_brief(self,
                             case_brief: CaseBrief,
@@ -913,6 +920,7 @@ class CaseBriefManager(QWidget):
         case_brief.save_to_file(filename)
         case_briefs.update_case_brief(case_brief)
         QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
+        print(f"Case brief '{case_brief.title}' created successfully!")
         self.creator.close()
         self.close()
     
