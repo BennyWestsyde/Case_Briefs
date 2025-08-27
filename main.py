@@ -37,6 +37,7 @@ from cleanup import clean_dir
 global master_file
 master_file = "CaseBriefs"
 
+
 def tex_escape(input:str) -> str:
     """Escape special characters for LaTeX."""
     replacements = {
@@ -380,7 +381,8 @@ class CaseBrief:
             os.remove(pdf_file)
         try:
             process: QProcess = QProcess()
-            process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
+            process.start("./bin/tinitex", [tex_file])
+            #process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
             if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
                 error_output = process.readAllStandardError().data().decode()
@@ -1001,6 +1003,8 @@ class CaseBriefApp(QMainWindow):
             return
         try:
             process = QProcess(self)
+            process.start("./bin/tinitex", ["--output-dir=./TMP", f"./{master_file}.tex"])
+            """
             process.start("latexmk", [ # pyright: ignore[reportUnknownMemberType]
                         "-synctex=1",
                         "-interaction=nonstopmode",
@@ -1008,7 +1012,7 @@ class CaseBriefApp(QMainWindow):
                         "-pdf",
                         "-shell-escape", 
                         "-outdir=./TMP",
-                        f"./{master_file}.tex"])
+                        f"./{master_file}.tex"])"""
             process.waitForFinished()
             if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
                 error_output = process.readAllStandardError().data().decode()
