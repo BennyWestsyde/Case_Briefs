@@ -48,8 +48,7 @@ def tex_escape(input:str) -> str:
         '#': '\\#',
         '_': '\\_',
         '~': '\\textasciitilde{}',
-        '^': '\\textasciicircum{}',
-        '"': '\"'
+        '^': '\\textasciicircum{}'
     }
     return str.translate(input, str.maketrans(replacements)).replace('\n', r'\\'+'\n').replace(". ", r'.\ ')
 
@@ -64,8 +63,7 @@ def tex_unescape(input:str) -> str:
         '\\#': '#',
         '\\_': '_',
         '\\textasciitilde{}': '~',
-        '\\textasciicircum{}': '^',
-        '\"': '"'
+        '\\textasciicircum{}': '^'
     }
     return str.translate(input, str.maketrans(replacements)).replace(r'\\'+'\n', '\n').replace(r'.\ ', ". ")
 
