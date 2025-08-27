@@ -243,6 +243,7 @@ class CaseBrief:
         
     def to_latex(self) -> str:
         """Generate a LaTeX representation of the case brief."""
+        citation_str = tex_escape(self.citation)
         subjects_str = ', '.join(str(s) for s in self.subject)
         opinions_str = ('\n').join(str(op) for op in self.opinions)
         opinions_str = tex_escape(opinions_str)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
@@ -254,6 +255,8 @@ class CaseBrief:
         procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), procedure_str)
         issue_str = tex_escape(self.issue)
         issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), issue_str)
+        principle_str = tex_escape(self.principle)
+        reasoning_str = tex_escape(self.reasoning)
         notes_str = tex_escape(self.notes)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), notes_str)
 
@@ -280,14 +283,14 @@ class CaseBrief:
         """ % (subjects_str,
                self.plaintiff,
                self.defendant,
-               self.citation,
+               citation_str,
                self.course,
                facts_str,
                procedure_str,
                issue_str,
                self.holding,
-               self.principle,
-               self.reasoning,
+               principle_str,
+               reasoning_str,
                opinions_str,
                self.label,
                notes_str)
@@ -407,7 +410,7 @@ class CaseBrief:
                 subjects = [Subject(s.strip()) for s in match.group(1).split(',') if s.strip()]
                 plaintiff = match.group(2).strip()
                 defendant = match.group(3).strip()
-                citation = match.group(4).strip()
+                citation = tex_unescape(match.group(4).strip())
                 course = match.group(5).strip()
                 facts = tex_unescape(match.group(6).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
@@ -420,7 +423,7 @@ class CaseBrief:
                 # Regex replace existing citations with the CITE(\1)
                 issue = re.sub(citation_regex, r'CITE(\1)', issue)
                 holding = match.group(9).strip()
-                principle = match.group(10).strip()
+                principle = tex_unescape(match.group(10).strip())
                 reasoning = tex_unescape(match.group(11).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', tex_unescape(match.group(12))) if o.strip()]
                 label = Label(match.group(13).strip())
@@ -459,9 +462,6 @@ class CaseBrief:
                                label=Label(cur_case[10]),
                                notes=cur_case[11])
         return case_brief
-
-    def render_pdf(self):
-        pass
     
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, CaseBrief):
