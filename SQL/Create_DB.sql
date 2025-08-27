@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS "Courses" (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS "Subjects" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL UNIQUE
@@ -14,7 +19,7 @@ CREATE TABLE IF NOT EXISTS "Cases" (
     defendant TEXT,
     title TEXT GENERATED ALWAYS AS (plaintiff || ' v. ' || defendant) STORED,
     citation TEXT,
-    course TEXT,
+    course TEXT REFERENCES "Courses"(name),
     facts TEXT,
     "procedure" TEXT,
     issue TEXT,
