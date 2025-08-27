@@ -47,7 +47,9 @@ def tex_escape(input:str) -> str:
         '#': '\\#',
         '_': '\\_',
         '~': '\\textasciitilde{}',
-        '^': '\\textasciicircum{}'
+        '^': '\\textasciicircum{}',
+        '. ': '.\\ ',
+        '"': '\"'
     }
     return str.translate(input, str.maketrans(replacements)).replace('\n', r'\\')
 
@@ -763,8 +765,8 @@ class CaseBriefManager(QWidget):
         search_entry.textChanged.connect(self.filter_case_briefs) # pyright: ignore[reportUnknownMemberType]
         class_dropdown = QComboBox()
         class_dropdown.setPlaceholderText("Select a class...")
-        class_dropdown.addItems(["All", "Torts", "Contracts", "Civil Procedure"])
-        class_dropdown.currentIndexChanged.connect(lambda: self.filter_case_briefs(class_dropdown.currentText() if class_dropdown.currentText() != "All" else ""))
+        class_dropdown.addItems(["All", "Torts", "Contracts", "Civil Procedure"]) # pyright: ignore[reportUnknownMemberType]
+        class_dropdown.currentIndexChanged.connect(lambda: self.filter_case_briefs(class_dropdown.currentText() if class_dropdown.currentText() != "All" else "")) # pyright: ignore[reportUnknownMemberType]
         content_layout.addWidget(class_dropdown, 0, 1, 1, 2) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
 
         for index, case_brief in enumerate(case_briefs.get_case_briefs()):
@@ -971,7 +973,7 @@ class CaseBriefApp(QMainWindow):
             return
         try:
             process = QProcess(self)
-            process.start("latexmk", [
+            process.start("latexmk", [ # pyright: ignore[reportUnknownMemberType]
                 "-synctex=1",
                 "-interaction=nonstopmode",
                 "-file-line-error",
