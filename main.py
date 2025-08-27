@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QUrl, QProcess
 from PyQt6.QtGui import QDesktopServices
 import sqlite3
+from cleanup import clean_dir
 
 global master_file
 master_file = "CaseBriefs"
@@ -48,10 +49,25 @@ def tex_escape(input:str) -> str:
         '_': '\\_',
         '~': '\\textasciitilde{}',
         '^': '\\textasciicircum{}',
-        '. ': '.\\ ',
         '"': '\"'
     }
-    return str.translate(input, str.maketrans(replacements)).replace('\n', r'\\')
+    return str.translate(input, str.maketrans(replacements)).replace('\n', r'\\'+'\n').replace(". ", r'.\ ')
+
+def tex_unescape(input:str) -> str:
+    """Unescape special characters for LaTeX."""
+    replacements = {
+        '\\{': '{',
+        '\\}': '}',
+        '\\$': '$',
+        '\\&': '&',
+        '\\%': '%',
+        '\\#': '#',
+        '\\_': '_',
+        '\\textasciitilde{}': '~',
+        '\\textasciicircum{}': '^',
+        '\"': '"'
+    }
+    return str.translate(input, str.maketrans(replacements)).replace(r'\\'+'\n', '\n').replace(r'.\ ', ". ")
 
 class Subject:
     """A class to represent a legal subject."""
@@ -234,9 +250,9 @@ class CaseBrief:
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
         facts_str = tex_escape(self.facts)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         facts_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), facts_str)
-        procedure_str = tex_escape(self.procedure)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        procedure_str = tex_escape(self.procedure)
         procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), procedure_str)
-        issue_str = tex_escape(self.issue)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
+        issue_str = tex_escape(self.issue)
         issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), issue_str)
         notes_str = tex_escape(self.notes)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.cite_case_brief(m.group(1)), notes_str)
@@ -368,6 +384,8 @@ class CaseBrief:
                 error_output = process.readAllStandardError().data().decode()
                 print(f"Error compiling {tex_file} to PDF: {error_output}")
                 return
+            else:
+                clean_dir("./Cases")
             print(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
@@ -391,22 +409,22 @@ class CaseBrief:
                 defendant = match.group(3).strip()
                 citation = match.group(4).strip()
                 course = match.group(5).strip()
-                facts = match.group(6).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                facts = tex_unescape(match.group(6).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 citation_regex = r'\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}'
                 facts = re.sub(citation_regex, r'CITE(\1)', facts)
-                procedure = match.group(7).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                procedure = tex_unescape(match.group(7).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 procedure = re.sub(citation_regex, r'CITE(\1)', procedure)
-                issue = match.group(8).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                issue = tex_unescape(match.group(8).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
                 issue = re.sub(citation_regex, r'CITE(\1)', issue)
                 holding = match.group(9).strip()
                 principle = match.group(10).strip()
-                reasoning = match.group(11).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-                opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', match.group(12).replace(r'\\'+'\n', '\n')).split('\n') if o.strip()]
+                reasoning = tex_unescape(match.group(11).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', tex_unescape(match.group(12))) if o.strip()]
                 label = Label(match.group(13).strip())
-                notes = match.group(14).strip().replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                notes = tex_unescape(match.group(14).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             else:
                 raise RuntimeError(f"Failed to parse case brief from {filename}. The file may not be in the correct format.")
 
@@ -986,6 +1004,8 @@ class CaseBriefApp(QMainWindow):
                 error_output = process.readAllStandardError().data().decode()
                 QMessageBox.critical(self, "LaTeX Error", error_output)
                 return
+            else:
+                clean_dir("./TMP")
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
             return
