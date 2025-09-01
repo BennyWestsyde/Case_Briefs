@@ -1,4 +1,4 @@
-from main import CaseBriefs
+from CaseBrief import CaseBriefs
 import sqlite3
 
 
@@ -7,8 +7,8 @@ if __name__ == "__main__":
     connect = sqlite3.connect("SQL/Cases.sqlite")
     cursor = connect.cursor()
     cases = CaseBriefs()
-    cases.load_cases_sql()
-    cases.load_cases_tex("Cases")
+    cases.reload_cases_sql()
+    #cases.reload_cases_tex()
     for case in cases.case_briefs:
         # Load the Subjects into the database
         subject_ids: list[int] = []

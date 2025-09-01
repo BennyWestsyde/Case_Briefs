@@ -1,4 +1,4 @@
-from main import CaseBriefs
+from CaseBrief import CaseBriefs
 
 if __name__ == "__main__":
     cases = CaseBriefs()

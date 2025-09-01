@@ -47,7 +47,7 @@
 
 
 \newcommand{\includecases}{
-	\immediate\write18{find ./Cases -name "*.tex" | sort > casefiles.txt}
+	\immediate\write18{find ../Cases -name "*.tex" | sort > casefiles.txt}
 	\newread\casefile
 	\openin\casefile=casefiles.txt
 	\loop

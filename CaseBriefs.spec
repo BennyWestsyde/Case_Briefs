@@ -3,9 +3,9 @@
 
 a = Analysis(
     ['main.py'],
-    pathex=['./bin'],
+    pathex=[],
     binaries=[('/usr/bin/sqlite3', 'bin'), ("bin/tinitex","bin")],
-    datas=[('CaseBriefs.tex', '.'), ('lawbrief.sty', '.'), ('SQL', 'SQL'), ('Cases', 'Cases'), ('bin', 'bin')],
+    datas=[('tex_src', 'tex_src'), ('SQL/Create_DB.sql', 'SQL'), ('SQL/Wipe_DB.sql','SQL') ('Cases', 'Cases'), ('bin', 'bin')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
