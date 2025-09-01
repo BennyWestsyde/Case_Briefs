@@ -8,7 +8,7 @@ import re
 import sqlite3
 from PyQt6.QtCore import QProcess
 
-from logger import StructuredLogger
+from extras.logger import StructuredLogger
 log = StructuredLogger("CaseBrief","TRACE","CaseBriefs.log",True,None,True,True)
 
 def tex_escape(input: str) -> str:

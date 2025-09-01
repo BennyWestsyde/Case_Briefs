@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon
 from GUI import CaseBriefApp
 
-from logger import StructuredLogger
+from extras.logger import StructuredLogger
 log = StructuredLogger("Main","TRACE","CaseBriefs.log",True,None,True,True)
 
 

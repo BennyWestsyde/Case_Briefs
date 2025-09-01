@@ -10,7 +10,7 @@ from extras.cleanup import clean_dir
 from typing import Callable
 from CaseBrief import CaseBrief, Subject, Label, Opinion, log, base_dir, case_briefs, master_file, subjects
 
-from logger import StructuredLogger
+from extras.logger import StructuredLogger
 log = StructuredLogger("GUI","TRACE","CaseBriefs.log",True,None,True,True)
 
 class CaseBriefCreator(QWidget):
