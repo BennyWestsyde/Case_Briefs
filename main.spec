@@ -3,9 +3,9 @@
 
 a = Analysis(
     ['main.py'],
-    pathex=['/Users/bennettwestfall/Library/Mobile\ Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs'],
-    binaries=[('/usr/bin/sqlite3', 'bin'), ("bin/tinitex","bin")],
-    datas=[('tex_src', 'tex_src'), ('SQL/Create_DB.sql', 'SQL'), ('SQL/Wipe_DB.sql','SQL'), ('Cases', 'Cases'), ('bin', 'bin')],
+    pathex=[],
+    binaries=[],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -21,8 +21,8 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='CaseBriefs',
-    debug=True,
+    name='main',
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
@@ -40,11 +40,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='CaseBriefs',
-)
-app = BUNDLE(
-    coll,
-    name='CaseBriefs.app',
-    icon=None,
-    bundle_identifier='com.mycompany.casebriefs',
+    name='main',
 )

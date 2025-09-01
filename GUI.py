@@ -6,11 +6,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QUrl, QProcess, pyqtSlot
 from PyQt6.QtGui import QDesktopServices
-from extras.cleanup import clean_dir
+from cleanup import clean_dir
 from typing import Callable
 from CaseBrief import CaseBrief, Subject, Label, Opinion, log, base_dir, case_briefs, master_file, subjects
 
-from extras.logger import StructuredLogger
+from logger import StructuredLogger
 log = StructuredLogger("GUI","TRACE","CaseBriefs.log",True,None,True,True)
 
 class CaseBriefCreator(QWidget):
@@ -29,9 +29,11 @@ class CaseBriefCreator(QWidget):
             self.content_layout.addWidget(QLabel("Create a new case brief"), 0, 0, 1, 2) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.plaintiff_entry = QLineEdit()
             self.plaintiff_entry.setPlaceholderText("Plaintiff Name")
+            self.plaintiff_entry.textChanged.connect(self.rerender_label) # pyright: ignore[reportUnknownMemberType]
             vs_label = QLabel("v.")
             self.defendant_entry = QLineEdit()
             self.defendant_entry.setPlaceholderText("Defendant Name")
+            self.defendant_entry.textChanged.connect(self.rerender_label) # pyright: ignore[reportUnknownMemberType]
             self.content_layout.addWidget(self.plaintiff_entry, 1, 0) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.content_layout.addWidget(vs_label, 1, 1) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             self.content_layout.addWidget(self.defendant_entry, 1, 2) # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
@@ -137,7 +139,14 @@ class CaseBriefCreator(QWidget):
             if subject in self.current_subjects_str_list:
                 self.current_subjects_str_list.remove(subject)
             self.rerender_subjects_list()
-            
+
+        def rerender_label(self):
+            """Rerender the label in the GUI."""
+            plaintiff = self.plaintiff_entry.text().strip()
+            defendant = self.defendant_entry.text().strip()
+            label_format = plaintiff.title().replace(" ", "") + "V" + defendant.title().replace(" ", "")
+            self.label_entry.setText(label_format)
+
         def rerender_subjects_list(self):
             """Rerender the subjects list in the GUI."""
             subjects_list = self.content_layout.itemAtPosition(4, 0).widget() # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
@@ -202,6 +211,7 @@ class CaseBriefCreator(QWidget):
             #case_brief.save_to_file(filename)
             case_briefs.add_case_brief(case_brief)
             case_briefs.sql.saveBrief(case_brief)
+            case_briefs.latex.saveBrief(case_brief)
             #case_brief.to_sql()
             QMessageBox.information(self, "Success", f"Case brief '{case_brief.title}' created successfully!")
             log.info(f"Case brief '{case_brief.title}' created successfully!")
@@ -218,6 +228,7 @@ class CaseBriefManager(QWidget):
     """
     def __init__(self):
         super().__init__()
+        log.info("Initializing Case Brief Manager")
         case_briefs.reload_cases_sql()
 
         self.setWindowTitle("Case Brief Manager")
@@ -406,6 +417,7 @@ class CaseBriefManager(QWidget):
 class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
+        log.info("Initializing Settings Window")
         self.setWindowTitle("Settings")
         self.setGeometry(150, 150, 400, 300)
         layout = QVBoxLayout()
@@ -427,7 +439,8 @@ class CaseBriefApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Case Briefs Manager")
         self.setGeometry(100, 100, 600, 400)
-        
+        log.info("Initializing Case Briefs Application")
+
         layout = QGridLayout()
         new_case_brief_button = QPushButton("Create Case Brief")
         new_case_brief_button.clicked.connect(self.create_case_brief) # pyright: ignore[reportUnknownMemberType]

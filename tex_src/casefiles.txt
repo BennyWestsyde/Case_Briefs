@@ -14,11 +14,13 @@
 ../Cases/Hawkins_V_McGee.tex
 ../Cases/Kolodziej_V_Mason.tex
 ../Cases/Lefkowitz_V_Greater_Minneapolis_Surplus_Store,_Inc.tex
+../Cases/Loring_V_City_Of_Boston.tex
 ../Cases/Lucy_V_Zehmer.tex
 ../Cases/McGuire_V_Almy.tex
 ../Cases/Meyer_V_Uber_Technologies,_Inc.tex
 ../Cases/Norcia_V_Samsung_Telecommunications_America,_LLC.tex
 ../Cases/Parvi_V_City_of_Kingston.tex
+../Cases/Petterson_V_Pattberg.tex
 ../Cases/Ranson_V_Kitner.tex
 ../Cases/Slocum_V_Food_Fair_Stores_of_Florida.tex
 ../Cases/Spano_V_Perini_Corp.tex

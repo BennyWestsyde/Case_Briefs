@@ -3,12 +3,12 @@ import subprocess
 import sys
 from typing import List, TypedDict, Union
 import os
-from extras.cleanup import clean_dir
+from cleanup import clean_dir
 import re
 import sqlite3
 from PyQt6.QtCore import QProcess
 
-from extras.logger import StructuredLogger
+from logger import StructuredLogger
 log = StructuredLogger("CaseBrief","TRACE","CaseBriefs.log",True,None,True,True)
 
 def tex_escape(input: str) -> str:
