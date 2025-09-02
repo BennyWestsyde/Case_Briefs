@@ -5,39 +5,55 @@ on:
 
 jobs:
   build:
-    # Run the job for both Intel (x86_64) and Apple Silicon (arm64) macOS
     strategy:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-13    # macOS runner on Intel (x86_64):contentReference[oaicite:3]{index=3}
+            runner: macos-13   # Intel runner
           - arch: arm64
-            runner: macos-14    # macOS runner on Apple Silicon (arm64):contentReference[oaicite:4]{index=4}
+            runner: macos-14   # Apple Silicon runner
     runs-on: ${{ matrix.runner }}
+
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'  # or an appropriate version for the project
+          # Use the version your project targets; 3.13 if you’re building with 3.13 locally
+          python-version: '3.13'
+          cache: 'pip'
 
       - name: Install dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pyqt6 pyspellchecker
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # Ensure pyinstaller is present even if not in requirements
+          pip install pyinstaller
 
-      - name: Build application with PyInstaller
-        run: pyinstaller CaseBriefs.spec  # Uses the spec file to build the app:contentReference[oaicite:5]{index=5}
-
-      - name: Archive app bundle
+      - name: Build with PyInstaller (spec file)
+        shell: bash
         run: |
-          # Create a ZIP archive of the built application bundle
-          cd dist && zip -r "CaseBriefs-${{ matrix.arch }}.zip" "CaseBriefs.app"
+          # If your spec assumes running from repo root, this is enough:
+          pyinstaller CaseBriefs.spec
+          # Verify output
+          test -d dist/CaseBriefs.app
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v3
+      - name: Package .app as zip (preserve metadata)
+        shell: bash
+        run: |
+          cd dist
+          # Use macOS 'ditto' to preserve resource forks/attrs when zipping .app
+          ditto -c -k --sequesterRsrc --keepParent "CaseBriefs.app" "CaseBriefs-${{ matrix.arch }}.zip"
+          ls -lah "CaseBriefs-${{ matrix.arch }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: CaseBriefs-${{ matrix.arch }}
           path: dist/CaseBriefs-${{ matrix.arch }}.zip
+          if-no-files-found: error
