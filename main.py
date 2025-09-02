@@ -27,23 +27,13 @@ from logger import StructuredLogger
 log = StructuredLogger("Main","TRACE","CaseBriefs.log",True,None,True,True)
 
 log.info("Starting Case Briefs Application")
-import os
 import sys
 from PyQt6.QtWidgets import (
     QApplication
 )
 from PyQt6.QtGui import QIcon
-from GUI import CaseBriefApp
+from GUI import CaseBriefInit, CaseBriefApp
 
-
-
-log.debug("Determining base directory")
-if getattr(sys, 'frozen', False):  # running as frozen
-    base_dir = sys.__file__  # PyInstaller bundle dir for one-file, or internal dir for one-folder
-    log.trace("Running in packaged mode with base directory: %s", base_dir)
-else:
-    base_dir = os.path.dirname(__file__)
-    log.trace("Running in normal mode with base directory: %s", base_dir)
 
 # Start by finding and loading all of the case brief files in ./Cases
 
@@ -51,6 +41,12 @@ if __name__ == "__main__":
     # Create a simple gui for the application
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon('ui/text.book.closed.png'))
+    window = CaseBriefInit()
+    window.show()
+    if window.initializer.complete:
+        log.info("Initialization complete, launching main application")
+    while window.isVisible():
+        app.processEvents()
     window = CaseBriefApp()
     window.show()
     sys.exit(app.exec())

@@ -1,5 +1,4 @@
 from pathlib import Path
-import subprocess
 import sys
 from typing import List, TypedDict, Union
 import os
@@ -55,26 +54,24 @@ class SQL:
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.cursor = self.connection.cursor()
 
-    def ensureDB(self) -> None:
+    def exists(self) -> bool:
+        """Check if the database exists."""
+        log.debug("Checking if database exists")
+        return Path(self.db_path).exists()
+
+    def ensureDB(self) -> bool:
         """Ensure the database and tables exist."""
         log.debug("Ensuring database exists")
-        if not os.path.exists(self.db_path):
+        if not self.exists():
             log.warning(f"Database not found, creating at {self.db_path}")
-            proc: subprocess.CompletedProcess[str] = subprocess.run(
-                ["sqlite3", str(self.db_path), " < " + os.path.join(base_dir, 'SQL', 'Create_DB.sql')],
-                text=True,                # so input/stdout/stderr are str
-                capture_output=True,      # capture stdout/stderr
-                check=True,               # raise if returncode != 0
-            )
-            # If you really need the code, it's here:
-            _rc: int = proc.returncode 
-            if _rc != 0:
-                log.critical(f"Failed to create database: {proc.stderr}")
-                sys.exit(1)
-            else:
-                log.info("Database created successfully")
+            with sqlite3.connect(str(SQL_FILE)) as conn:
+                with open(SQL_CREATE, "r", encoding="utf-8") as f:
+                    conn.executescript(f.read())
+            log.info("Database created successfully")
+            return True
         else:
             log.info("Database found")
+            return True
 
     def execute(self, query: str, params: tuple[SQLiteValue, ...] = ()) -> sqlite3.Cursor:
         """Execute a SQL query and return the cursor."""
@@ -126,13 +123,13 @@ class SQL:
             ))
 
             # Clear existing subjects and opinions
-            log.debug("Deleting existing subjects and opinions")
+            log.trace("Deleting existing subjects and opinions")
             self.execute("DELETE FROM CaseSubjects WHERE case_label = ?", (brief.label.text,))
             self.execute("DELETE FROM CaseOpinions WHERE case_label = ?", (brief.label.text,))
 
             # Insert subjects
             for subject in brief.subject:
-                log.debug(f"Saving Subject: {subject.name}")
+                log.trace(f"Saving Subject: {subject.name}")
                 self.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
                 subject_id = self.cursor.fetchone()
                 if not subject_id:
@@ -144,7 +141,7 @@ class SQL:
 
             # Insert opinions
             for opinion in brief.opinions:
-                log.debug(f"Saving Opinion By: {opinion.author}")
+                log.trace(f"Saving Opinion By: {opinion.author}")
                 self.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
                 opinion_id = self.cursor.fetchone()
                 if not opinion_id:
@@ -168,6 +165,8 @@ class SQL:
         if not cur_case:
             log.error(f"No case brief found with label '{case_label}' in the database.")
             raise RuntimeError(f"No case brief found with label '{case_label}' in the database.")
+        else:
+            log.trace(f"Found case brief: {cur_case[-2]}")
         self.execute("SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?", (case_label,))
         opinions = [Opinion(*opinion) for opinion in self.cursor.fetchall()]
         self.execute("SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?", (case_label,))
@@ -231,9 +230,9 @@ class SQL:
 class Latex:
     """A class to handle LaTeX document generation."""
     def __init__(self):
-        self.engine_path: Path = Path(os.path.join(base_dir, "bin", "tinitex"))
-        self.tex_dir: Path = Path(os.path.join(base_dir, "Cases"))
-        self.render_dir: Path = Path(os.path.join(base_dir, "Render"))
+        self.engine_path: Path = WRITE_DIR / "bin" / "tinitex"
+        self.tex_dir: Path = CASES_DIR
+        self.render_dir: Path = CASES_DIR
 
     def _brief2Latex(self, brief: 'CaseBrief') -> str:
         """Convert a CaseBrief object to its LaTeX representation."""
@@ -589,7 +588,7 @@ class CaseBrief:
 
     def get_pdf_path(self) -> str:
         """Get the path to the PDF file for this case brief."""
-        return os.path.join(base_dir, "Cases", f"{self.filename}.pdf")
+        return str(CASES_DIR / f"{self.filename}.pdf")
 
     
     def to_latex(self) -> str:
@@ -648,7 +647,7 @@ class CaseBrief:
     
     def to_sql(self) -> None:
         log.debug(f"Saving case brief '{self.label.text}' to SQL database")
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(str(SQL_FILE))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         try:
@@ -727,14 +726,14 @@ class CaseBrief:
 
     def compile_to_pdf(self) -> str|None:
         """Compile the LaTeX file to PDF."""
-        tex_file = os.path.join(base_dir, "Cases", f"{self.filename}.tex")
-        self.save_to_file(tex_file)
+        tex_file = CASES_DIR / f"{self.filename}.tex"
+        self.save_to_file(str(tex_file))
         pdf_file = self.get_pdf_path()
         if os.path.exists(pdf_file):
             os.remove(pdf_file)
         try:
             process: QProcess = QProcess()
-            process.start(os.path.join(base_dir, "bin", "tinitex"), [tex_file])
+            process.start(str(WRITE_DIR / "bin" / "tinitex"), [str(tex_file)])
             #process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
             if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
@@ -742,7 +741,7 @@ class CaseBrief:
                 log.error(f"Error compiling {tex_file} to PDF: {error_output}")
                 return
             else:
-                clean_dir(os.path.join(base_dir, "Cases"))
+                clean_dir(str(CASES_DIR))
             log.info(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
@@ -792,7 +791,7 @@ class CaseBrief:
     def load_from_sql(case_label: str) -> 'CaseBrief':
         """Load a case brief from the SQL database by its label."""
         log.debug(f"Loading case brief from SQL with label {case_label}")
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(str(SQL_FILE))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         curr.execute("SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?", (case_label,))
@@ -830,13 +829,13 @@ class CaseBriefs:
     """A class to manage multiple case briefs."""
     def __init__(self):
         self.case_briefs: list[CaseBrief] = []
-        self.sql = SQL(db_path="SQL/Cases.sqlite")
+        self.sql = SQL(db_path=str(SQL_FILE))
         self.latex = Latex()
 
     def reload_cases_tex(self) -> None:
         """Reload all case briefs from the ./Cases directory."""
         log.info("Reloading case briefs from TeX files...")
-        case_path = os.path.join(base_dir, "Cases")
+        case_path = CASES_DIR
         for filename in os.listdir(case_path):
             if filename.endswith(".tex"):
                 brief = self.latex.loadBrief(os.path.join(case_path, filename))
@@ -956,16 +955,57 @@ def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
             labels.append(case_brief.label)
     return labels
 
-global master_file
-master_file: Path = Path("CaseBriefs")
+from pathlib import Path
 
-global base_dir
-base_dir: str = "."
+APP_NAME = "CaseBriefs"
 
+def app_dirs():
+    # Where to READ bundled resources (inside .app or onefile temp)
+    if getattr(sys, "frozen", False):
+        log.info("Running in a bundled environment")
+        resources_dir = Path(sys._MEIPASS)  # type: ignore # PyInstaller unpack dir
+        bundle_dir = Path(sys.executable).resolve().parents[2]  # .../CaseBriefs.app/Contents
+    else:
+        log.info("Running in a development environment")
+        resources_dir = Path(__file__).resolve().parent
+        bundle_dir = resources_dir
 
-global db_path
-log.debug(f"Base Directory: {base_dir}")
-db_path: str = os.path.join(base_dir, 'SQL', 'Cases.sqlite')
+    log.debug(f"Resources Directory: {resources_dir}")
+    log.debug(f"Bundle Directory: {bundle_dir}")
+
+    # Where to WRITE user data (never write into the .app)
+    if resources_dir == bundle_dir:
+        log.debug("Using local directory for writable data")
+        writable_dir = bundle_dir
+    else:
+        try:
+            # macOS Application Support path
+            from PyQt6.QtCore import QStandardPaths
+            base = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))  / "CaseBrief"
+            writable_dir = Path(base) if base else Path.home() / "Library" / "Application Support" / "CaseBrief" # APP_NAME
+        except Exception:
+            writable_dir = Path.home() / "Library" / "Application Support" / "CaseBrief"# APP_NAME
+        log.debug(f"Writable Directory: {writable_dir}")
+        writable_dir.mkdir(parents=True, exist_ok=True)
+    return resources_dir, bundle_dir, writable_dir
+
+global RES_DIR, BUNDLE_DIR, WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, SQL_DIR, SQL_SRC_DIR, SQL_FILE, SQL_CREATE, MSTR_TEX
+RES_DIR, BUNDLE_DIR, WRITE_DIR = app_dirs()
+
+# Example subfolders you were creating relatively before:
+TMP_DIR     = WRITE_DIR / "TMP"
+CASES_DIR   = WRITE_DIR / "Cases"
+TEX_SRC_DIR = RES_DIR / "tex_src"
+MSTR_TEX = TEX_SRC_DIR / "CaseBriefs.tex"
+SQL_DIR     = WRITE_DIR / "SQL"
+SQL_FILE    = SQL_DIR / "Cases.sqlite"
+SQL_SRC_DIR = RES_DIR / "SQL"
+SQL_CREATE  = SQL_SRC_DIR / "Create_DB.sql"
+
+for d in (WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, SQL_DIR, SQL_SRC_DIR):
+    d.mkdir(parents=True, exist_ok=True)
+
+log.debug(f"Base Directory: {WRITE_DIR}")
 
 global case_briefs, subjects, labels
 case_briefs = CaseBriefs()
