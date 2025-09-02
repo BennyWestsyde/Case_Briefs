@@ -39,10 +39,10 @@ from CaseBrief import (
     CASES_DIR,
     TEX_SRC_DIR,
     TEX_DST_DIR,
-    MSTR_DST_STY,
-    MSTR_DST_TEX,
-    MSTR_SRC_STY,
-    MSTR_SRC_TEX,
+    MASTER_DST_STY,
+    MASTER_DST_TEX,
+    MASTER_SRC_STY,
+    MASTER_SRC_TEX,
 )
 
 from logger import StructuredLogger
@@ -447,7 +447,7 @@ class CaseBriefCreator(QWidget):
 
     def rerender_subjects_list(self):
         """Rerender the subjects list in the GUI."""
-        subjects_list = self.content_layout.itemAtPosition(
+        subjects_list: QWidget | None = self.content_layout.itemAtPosition(
             4, 0
         ).widget()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
         if subjects_list is not None:
@@ -827,16 +827,16 @@ class Initializer:
             (self.ensure_dir, (TMP_DIR,)),
             (self.ensure_dir, (CASES_DIR,)),
             (self.ensure_dir, (TEX_SRC_DIR,)),
-            (self.ensure_file, (MSTR_SRC_TEX,)),
-            (self.ensure_file, (MSTR_SRC_STY,)),
+            (self.ensure_file, (MASTER_SRC_TEX,)),
+            (self.ensure_file, (MASTER_SRC_STY,)),
             (self.ensure_dir, (TEX_DST_DIR,)),
             (
                 self.ensure_move,
-                (MSTR_SRC_STY, MSTR_DST_STY),
+                (MASTER_SRC_STY, MASTER_DST_STY),
             ),
             (
                 self.ensure_move,
-                (MSTR_SRC_TEX, MSTR_DST_TEX),
+                (MASTER_SRC_TEX, MASTER_DST_TEX),
             ),
             (self.ensure_dir, (SQL_DST_DIR,)),
             (self.ensure_db, (SQL_DST_FILE,)),
@@ -1052,7 +1052,7 @@ class CaseBriefApp(QMainWindow):
                 f"--output-dir={output_path}",
                 "--pdf-engine=pdflatex",  # or xelatex/lualatex
                 "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
-                f"{MSTR_DST_TEX}",
+                f"{MASTER_DST_TEX}",
             ]
             process.setProgram(str(program))
             process.setArguments(args)
@@ -1076,12 +1076,12 @@ class CaseBriefApp(QMainWindow):
         QMessageBox.information(
             self,
             "PDF Rendered",
-            f"PDF for {MSTR_DST_TEX.stem} has been generated successfully.",
+            f"PDF for {MASTER_DST_TEX.stem} has been generated successfully.",
         )
         log.info(f"Moving PDF to Downloads folder")
         shutil.move(
-            TMP_DIR / f"{MSTR_DST_TEX.stem}.pdf",
-            os.path.join(Path.home(), "Downloads", f"{MSTR_DST_TEX.stem}.pdf"),
+            TMP_DIR / f"{MASTER_DST_TEX.stem}.pdf",
+            os.path.join(Path.home(), "Downloads", f"{MASTER_DST_TEX.stem}.pdf"),
         )
         # Here you would typically call the method to generate the PDF
 

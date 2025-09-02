@@ -62,7 +62,7 @@ def app_dirs():
     return resources_dir, bundle_dir, writable_dir
 
 
-global RES_DIR, BUNDLE_DIR, WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, TEX_DST_DIR, MSTR_SRC_TEX, MSTR_SRC_STY, MSTR_DST_TEX, MSTR_DST_STY, SQL_SRC_DIR, SQL_DST_DIR, SQL_SRC_FILE, SQL_DST_FILE, SQL_CREATE
+global RES_DIR, BUNDLE_DIR, WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, TEX_DST_DIR, MASTER_SRC_TEX, MASTER_SRC_STY, MASTER_DST_TEX, MASTER_DST_STY, SQL_SRC_DIR, SQL_DST_DIR, SQL_SRC_FILE, SQL_DST_FILE, SQL_CREATE
 RES_DIR, BUNDLE_DIR, WRITE_DIR = app_dirs()
 
 # Example subfolders you were creating relatively before:
@@ -70,10 +70,10 @@ TMP_DIR = WRITE_DIR / "TMP"
 CASES_DIR = WRITE_DIR / "Cases"
 TEX_SRC_DIR = RES_DIR / "tex_src"
 TEX_DST_DIR = WRITE_DIR / "tex_src"
-MSTR_SRC_TEX = TEX_SRC_DIR / "CaseBriefs.tex"
-MSTR_SRC_STY = TEX_SRC_DIR / "lawbrief.sty"
-MSTR_DST_TEX = TEX_DST_DIR / "CaseBriefs.tex"
-MSTR_DST_STY = TEX_DST_DIR / "lawbrief.sty"
+MASTER_SRC_TEX = TEX_SRC_DIR / "CaseBriefs.tex"
+MASTER_SRC_STY = TEX_SRC_DIR / "lawbrief.sty"
+MASTER_DST_TEX = TEX_DST_DIR / "CaseBriefs.tex"
+MASTER_DST_STY = TEX_DST_DIR / "lawbrief.sty"
 SQL_SRC_DIR = RES_DIR / "SQL"
 SQL_DST_DIR = WRITE_DIR / "SQL"
 SQL_SRC_FILE = SQL_SRC_DIR / "Cases.sqlite"
