@@ -8,45 +8,142 @@ import sqlite3
 from PyQt6.QtCore import QProcess
 
 from logger import StructuredLogger
-log = StructuredLogger("CaseBrief","TRACE","CaseBriefs.log",True,None,True,True)
+from pathlib import Path
+
+global APP_NAME
+APP_NAME = "CaseBriefs"
+
+
+def app_dirs():
+    # Where to READ bundled resources (inside .app or onefile temp)
+    log = StructuredLogger("CaseBrief", "TRACE", None, True, None, True, True)
+    if getattr(sys, "frozen", False):
+        log.info("Running in a bundled environment")
+        resources_dir = Path(sys._MEIPASS)  # type: ignore # PyInstaller unpack dir
+        bundle_dir = (
+            Path(sys.executable).resolve().parents[2]
+        )  # .../CaseBriefs.app/Contents
+    else:
+        log.info("Running in a development environment")
+        resources_dir = Path(__file__).resolve().parent
+        bundle_dir = resources_dir
+
+    log.debug(f"Resources Directory: {resources_dir}")
+    log.debug(f"Bundle Directory: {bundle_dir}")
+
+    # Where to WRITE user data (never write into the .app)
+    if resources_dir == bundle_dir:
+        log.debug("Using local directory for writable data")
+        writable_dir = bundle_dir
+    else:
+        try:
+            # macOS Application Support path
+            from PyQt6.QtCore import QStandardPaths
+
+            base = (
+                Path(
+                    QStandardPaths.writableLocation(
+                        QStandardPaths.StandardLocation.AppDataLocation
+                    )
+                )
+                / APP_NAME
+            )
+            writable_dir = (
+                Path(base)
+                if base
+                else Path.home() / "Library" / "Application Support" / APP_NAME
+            )  # APP_NAME
+        except Exception:
+            writable_dir = (
+                Path.home() / "Library" / "Application Support" / APP_NAME
+            )  # APP_NAME
+        log.debug(f"Writable Directory: {writable_dir}")
+        writable_dir.mkdir(parents=True, exist_ok=True)
+    return resources_dir, bundle_dir, writable_dir
+
+
+global RES_DIR, BUNDLE_DIR, WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, TEX_DST_DIR, MSTR_SRC_TEX, MSTR_SRC_STY, MSTR_DST_TEX, MSTR_DST_STY, SQL_SRC_DIR, SQL_DST_DIR, SQL_SRC_FILE, SQL_DST_FILE, SQL_CREATE
+RES_DIR, BUNDLE_DIR, WRITE_DIR = app_dirs()
+
+# Example subfolders you were creating relatively before:
+TMP_DIR = WRITE_DIR / "TMP"
+CASES_DIR = WRITE_DIR / "Cases"
+TEX_SRC_DIR = RES_DIR / "tex_src"
+TEX_DST_DIR = WRITE_DIR / "tex_src"
+MSTR_SRC_TEX = TEX_SRC_DIR / "CaseBriefs.tex"
+MSTR_SRC_STY = TEX_SRC_DIR / "lawbrief.sty"
+MSTR_DST_TEX = TEX_DST_DIR / "CaseBriefs.tex"
+MSTR_DST_STY = TEX_DST_DIR / "lawbrief.sty"
+SQL_SRC_DIR = RES_DIR / "SQL"
+SQL_DST_DIR = WRITE_DIR / "SQL"
+SQL_SRC_FILE = SQL_SRC_DIR / "Cases.sqlite"
+SQL_DST_FILE = SQL_DST_DIR / "Cases.sqlite"
+SQL_CREATE = SQL_SRC_DIR / "Create_DB.sql"
+
+for d in (
+    WRITE_DIR,
+    TMP_DIR,
+    CASES_DIR,
+    TEX_SRC_DIR,
+    TEX_DST_DIR,
+    SQL_SRC_DIR,
+    SQL_DST_DIR,
+):
+    d.mkdir(parents=True, exist_ok=True)
+
+log = StructuredLogger(
+    "CaseBrief", "TRACE", str(WRITE_DIR / "CaseBriefs.log"), True, None, True, True
+)
+
+log.debug(f"Base Directory: {WRITE_DIR}")
+
 
 def tex_escape(input: str) -> str:
     """Escape special characters for LaTeX."""
     replacements = {
-        '{': '\\{',
-        '}': '\\}',
-        '$': '\\$',
-        '&': '\\&',
-        '%': '\\%',
-        '#': '\\#',
-        '_': '\\_',
-        '~': '\\textasciitilde{}',
-        '^': '\\textasciicircum{}'
+        "{": "\\{",
+        "}": "\\}",
+        "$": "\\$",
+        "&": "\\&",
+        "%": "\\%",
+        "#": "\\#",
+        "_": "\\_",
+        "~": "\\textasciitilde{}",
+        "^": "\\textasciicircum{}",
     }
-    return str.translate(input, str.maketrans(replacements)).replace('\n', r'\\'+'\n').replace(". ", r'.\ ')
+    return (
+        str.translate(input, str.maketrans(replacements))
+        .replace("\n", r"\\" + "\n")
+        .replace(". ", r".\ ")
+    )
 
-def tex_unescape(input:str) -> str:
+
+def tex_unescape(input: str) -> str:
     """Unescape special characters for LaTeX."""
     replacements = {
-        '\\{': '{',
-        '\\}': '}',
-        '\\$': '$',
-        '\\&': '&',
-        '\\%': '%',
-        '\\#': '#',
-        '\\_': '_',
-        '\\textasciitilde{}': '~',
-        '\\textasciicircum{}': '^'
+        "\\{": "{",
+        "\\}": "}",
+        "\\$": "$",
+        "\\&": "&",
+        "\\%": "%",
+        "\\#": "#",
+        "\\_": "_",
+        "\\textasciitilde{}": "~",
+        "\\textasciicircum{}": "^",
     }
-    return str.translate(input, str.maketrans(replacements)).replace(r'\\'+'\n', '\n').replace(r'.\ ', ". ")
-
-
+    return (
+        str.translate(input, str.maketrans(replacements))
+        .replace(r"\\" + "\n", "\n")
+        .replace(r".\ ", ". ")
+    )
 
 
 SQLiteValue = Union[str, int, float, bytes, None]
 
+
 class SQL:
     """A class to handle interaction with the database."""
+
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.ensureDB()
@@ -64,7 +161,7 @@ class SQL:
         log.debug("Ensuring database exists")
         if not self.exists():
             log.warning(f"Database not found, creating at {self.db_path}")
-            with sqlite3.connect(str(SQL_FILE)) as conn:
+            with sqlite3.connect(str(SQL_DST_FILE)) as conn:
                 with open(SQL_CREATE, "r", encoding="utf-8") as f:
                     conn.executescript(f.read())
             log.info("Database created successfully")
@@ -73,7 +170,9 @@ class SQL:
             log.info("Database found")
             return True
 
-    def execute(self, query: str, params: tuple[SQLiteValue, ...] = ()) -> sqlite3.Cursor:
+    def execute(
+        self, query: str, params: tuple[SQLiteValue, ...] = ()
+    ) -> sqlite3.Cursor:
         """Execute a SQL query and return the cursor."""
         self.cursor.execute(query, params)
         return self.cursor
@@ -85,8 +184,8 @@ class SQL:
     def close(self) -> None:
         """Close the database connection."""
         self.connection.close()
-    
-    def saveBrief(self, brief: 'CaseBrief') -> None:
+
+    def saveBrief(self, brief: "CaseBrief") -> None:
         """Save a case brief to the database."""
         log.debug(f"Saving brief for case: {brief.citation}")
         cases_table_query = """
@@ -107,25 +206,32 @@ class SQL:
             """
         try:
             # Insert or update the main case brief information
-            self.execute(cases_table_query, (
-                brief.label.text,
-                brief.plaintiff,
-                brief.defendant,
-                brief.citation,
-                brief.course,
-                brief.facts,
-                brief.procedure,
-                brief.issue,
-                brief.holding,
-                brief.principle,
-                brief.reasoning,
-                brief.notes
-            ))
+            self.execute(
+                cases_table_query,
+                (
+                    brief.label.text,
+                    brief.plaintiff,
+                    brief.defendant,
+                    brief.citation,
+                    brief.course,
+                    brief.facts,
+                    brief.procedure,
+                    brief.issue,
+                    brief.holding,
+                    brief.principle,
+                    brief.reasoning,
+                    brief.notes,
+                ),
+            )
 
             # Clear existing subjects and opinions
             log.trace("Deleting existing subjects and opinions")
-            self.execute("DELETE FROM CaseSubjects WHERE case_label = ?", (brief.label.text,))
-            self.execute("DELETE FROM CaseOpinions WHERE case_label = ?", (brief.label.text,))
+            self.execute(
+                "DELETE FROM CaseSubjects WHERE case_label = ?", (brief.label.text,)
+            )
+            self.execute(
+                "DELETE FROM CaseOpinions WHERE case_label = ?", (brief.label.text,)
+            )
 
             # Insert subjects
             for subject in brief.subject:
@@ -133,61 +239,97 @@ class SQL:
                 self.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
                 subject_id = self.cursor.fetchone()
                 if not subject_id:
-                    self.execute("INSERT INTO Subjects (name) VALUES (?)", (subject.name,))
-                    self.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
+                    self.execute(
+                        "INSERT INTO Subjects (name) VALUES (?)", (subject.name,)
+                    )
+                    self.execute(
+                        "SELECT id FROM Subjects where name = ?", (subject.name,)
+                    )
                     subject_id = self.cursor.fetchone()
                 subject_id = subject_id[0]
-                self.execute("INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)", (brief.label.text, subject_id,))
+                self.execute(
+                    "INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)",
+                    (
+                        brief.label.text,
+                        subject_id,
+                    ),
+                )
 
             # Insert opinions
             for opinion in brief.opinions:
                 log.trace(f"Saving Opinion By: {opinion.author}")
-                self.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
+                self.execute(
+                    "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
+                )
                 opinion_id = self.cursor.fetchone()
                 if not opinion_id:
-                    self.execute("INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)", (opinion.author, opinion.text,))
-                    self.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
+                    self.execute(
+                        "INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)",
+                        (
+                            opinion.author,
+                            opinion.text,
+                        ),
+                    )
+                    self.execute(
+                        "SELECT id FROM Opinions where opinion_text = ?",
+                        (opinion.text,),
+                    )
                     opinion_id = self.cursor.fetchone()
                 opinion_id = opinion_id[0]
-                self.execute("INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)", (brief.label.text, opinion_id))
+                self.execute(
+                    "INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)",
+                    (brief.label.text, opinion_id),
+                )
 
             self.commit()
         except sqlite3.Error as e:
             self.connection.rollback()
-            log.error(f"Error saving case brief to database: {e}")
-        
+            log.error(f"Error saving case brief to database: {e}", e.__traceback__)
 
-    def loadBrief(self, case_label: str) -> 'CaseBrief':
+    def loadBrief(self, case_label: str) -> "CaseBrief":
         """Load a case brief from the database by its label."""
         log.debug(f"Loading case brief from SQL with label {case_label}")
-        self.execute("SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?", (case_label,))
+        self.execute(
+            "SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?",
+            (case_label,),
+        )
         cur_case = self.cursor.fetchone()
         if not cur_case:
             log.error(f"No case brief found with label '{case_label}' in the database.")
-            raise RuntimeError(f"No case brief found with label '{case_label}' in the database.")
+            raise RuntimeError(
+                f"No case brief found with label '{case_label}' in the database."
+            )
         else:
             log.trace(f"Found case brief: {cur_case[-2]}")
-        self.execute("SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?", (case_label,))
+        self.execute(
+            "SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?",
+            (case_label,),
+        )
         opinions = [Opinion(*opinion) for opinion in self.cursor.fetchall()]
-        self.execute("SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?", (case_label,))
+        self.execute(
+            "SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?",
+            (case_label,),
+        )
         subjects = [Subject(subject[-1]) for subject in self.cursor.fetchall()]
         # Assuming the database schema matches the order of fields in CaseBrief
-        case_brief = CaseBrief(subject=subjects,
-                               opinions=opinions,
-                               plaintiff=cur_case[0],
-                               defendant=cur_case[1],
-                               citation=cur_case[2],
-                               course=cur_case[3],
-                               facts=cur_case[4],
-                               procedure=cur_case[5],
-                               issue=cur_case[6],
-                               holding=cur_case[7],
-                               principle=cur_case[8],
-                               reasoning=cur_case[9],
-                               label=Label(cur_case[10]),
-                               notes=cur_case[11])
+        case_brief = CaseBrief(
+            subject=subjects,
+            opinions=opinions,
+            plaintiff=cur_case[0],
+            defendant=cur_case[1],
+            citation=cur_case[2],
+            course=cur_case[3],
+            facts=cur_case[4],
+            procedure=cur_case[5],
+            issue=cur_case[6],
+            holding=cur_case[7],
+            principle=cur_case[8],
+            reasoning=cur_case[9],
+            label=Label(cur_case[10]),
+            notes=cur_case[11],
+        )
         return case_brief
-    
+
     def cite_case_brief(self, label: str) -> str:
         """Generate a citation for a case brief."""
         log.debug(f"Citing case brief with label {label}")
@@ -217,7 +359,10 @@ class SQL:
             self.commit()
             self.execute("SELECT id FROM Subjects WHERE name = ?", (subject,))
             subject_id = self.cursor.fetchone()
-        self.execute("INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)", (label, subject_id))
+        self.execute(
+            "INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)",
+            (label, subject_id),
+        )
         self.commit()
 
     def fetchCaseSubjects(self) -> list[str]:
@@ -226,32 +371,60 @@ class SQL:
         self.execute("SELECT name FROM Subjects")
         subjects = [row[0] for row in self.cursor.fetchall()]
         return subjects
-    
+
+
 class Latex:
     """A class to handle LaTeX document generation."""
+
     def __init__(self):
         self.engine_path: Path = WRITE_DIR / "bin" / "tinitex"
         self.tex_dir: Path = CASES_DIR
         self.render_dir: Path = CASES_DIR
 
-    def _brief2Latex(self, brief: 'CaseBrief') -> str:
+    def _brief2Latex(self, brief: "CaseBrief") -> str:
         """Convert a CaseBrief object to its LaTeX representation."""
         citation_str = tex_escape(brief.citation)
-        subjects_str = ', '.join(str(s) for s in brief.subject)
-        opinions_str = ('\n').join(str(op) for op in brief.opinions)
-        opinions_str = tex_escape(opinions_str)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
-        opinions_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), opinions_str)
+        subjects_str = ", ".join(str(s) for s in brief.subject)
+        opinions_str = ("\n").join(str(op) for op in brief.opinions)
+        opinions_str = tex_escape(
+            opinions_str
+        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+        opinions_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            opinions_str,
+        )
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
-        facts_str = tex_escape(brief.facts)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
-        facts_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), facts_str)
+        facts_str = tex_escape(
+            brief.facts
+        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+        facts_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            facts_str,
+        )
         procedure_str = tex_escape(brief.procedure)
-        procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), procedure_str)
+        procedure_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            procedure_str,
+        )
         issue_str = tex_escape(brief.issue)
-        issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), issue_str)
+        issue_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            issue_str,
+        )
         principle_str = tex_escape(brief.principle)
         reasoning_str = tex_escape(brief.reasoning)
-        notes_str = tex_escape(brief.notes)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
-        notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), notes_str)
+        notes_str = tex_escape(
+            brief.notes
+        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+        notes_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            notes_str,
+        )
 
         return """
             \\documentclass[../tex_src/CaseBriefs.tex]{subfiles}
@@ -273,63 +446,101 @@ class Latex:
                     notes={%s}
             }
             \\end{document}
-        """ % (subjects_str,
-               brief.plaintiff,
-               brief.defendant,
-               citation_str,
-               brief.course,
-               facts_str,
-               procedure_str,
-               issue_str,
-               brief.holding,
-               principle_str,
-               reasoning_str,
-               opinions_str,
-               brief.label,
-               notes_str)
+        """ % (
+            subjects_str,
+            brief.plaintiff,
+            brief.defendant,
+            citation_str,
+            brief.course,
+            facts_str,
+            procedure_str,
+            issue_str,
+            brief.holding,
+            principle_str,
+            reasoning_str,
+            opinions_str,
+            brief.label,
+            notes_str,
+        )
 
-    def _latex2Brief(self, tex_content: str) -> 'CaseBrief':
+    def _latex2Brief(self, tex_content: str) -> "CaseBrief":
         """Convert LaTeX content back to a CaseBrief object."""
         # Here you would parse the content to extract the case brief details
         # This is a placeholder implementation
-        regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}'
+        regex = r"\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}"
         match = re.search(regex, tex_content, re.DOTALL)
         if match:
-            subjects = [Subject(s.strip()) for s in match.group(1).split(',') if s.strip()]
+            subjects = [
+                Subject(s.strip()) for s in match.group(1).split(",") if s.strip()
+            ]
             plaintiff = match.group(2).strip()
             defendant = match.group(3).strip()
             citation = tex_unescape(match.group(4).strip())
             course = match.group(5).strip()
-            facts = tex_unescape(match.group(6).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+            facts = tex_unescape(
+                match.group(6).strip()
+            )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             # Regex replace existing citations with the CITE(\1)
-            citation_regex = r'\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}'
-            facts = re.sub(citation_regex, r'CITE(\1)', facts)
-            procedure = tex_unescape(match.group(7).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+            citation_regex = r"\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}"
+            facts = re.sub(citation_regex, r"CITE(\1)", facts)
+            procedure = tex_unescape(
+                match.group(7).strip()
+            )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             # Regex replace existing citations with the CITE(\1)
-            procedure = re.sub(citation_regex, r'CITE(\1)', procedure)
-            issue = tex_unescape(match.group(8).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+            procedure = re.sub(citation_regex, r"CITE(\1)", procedure)
+            issue = tex_unescape(
+                match.group(8).strip()
+            )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             # Regex replace existing citations with the CITE(\1)
-            issue = re.sub(citation_regex, r'CITE(\1)', issue)
+            issue = re.sub(citation_regex, r"CITE(\1)", issue)
             holding = match.group(9).strip()
             principle = tex_unescape(match.group(10).strip())
-            reasoning = tex_unescape(match.group(11).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-            opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', tex_unescape(match.group(12))) if o.strip()]
+            reasoning = tex_unescape(
+                match.group(11).strip()
+            )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+            opinions = [
+                Opinion(
+                    o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()
+                )
+                for o in re.sub(
+                    citation_regex, r"CITE(\1)", tex_unescape(match.group(12))
+                )
+                if o.strip()
+            ]
             label = Label(match.group(13).strip())
-            notes = tex_unescape(match.group(14).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+            notes = tex_unescape(
+                match.group(14).strip()
+            )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
         else:
-            raise RuntimeError(f"Failed to parse case brief. The file may not be in the correct format.")
+            raise RuntimeError(
+                f"Failed to parse case brief. The file may not be in the correct format."
+            )
 
-        return CaseBrief(subjects, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, opinions, label, notes)
+        return CaseBrief(
+            subjects,
+            plaintiff,
+            defendant,
+            citation,
+            course,
+            facts,
+            procedure,
+            issue,
+            holding,
+            principle,
+            reasoning,
+            opinions,
+            label,
+            notes,
+        )
 
-
-    def saveBrief(self, brief: 'CaseBrief') -> Path:
+    def saveBrief(self, brief: "CaseBrief") -> Path:
         tex_content = self._brief2Latex(brief)
         tex_file = self.tex_dir / f"{brief.filename}.tex"
         with tex_file.open("w") as f:
             f.write(tex_content)
         return tex_file
 
-    def loadBrief(self, filename: str) -> 'CaseBrief':
+    def loadBrief(self, filename: str) -> "CaseBrief":
         tex_file = self.tex_dir / f"{filename}.tex"
         if not tex_file.exists():
             raise FileNotFoundError(f"LaTeX file {tex_file} does not exist.")
@@ -337,9 +548,10 @@ class Latex:
             tex_content = f.read()
         return self._latex2Brief(tex_content)
 
-    def validateBrief(self, brief: 'CaseBrief') -> bool:
+    def validateBrief(self, brief: "CaseBrief") -> bool:
         """Validate the case brief."""
         results = brief.__dict__
+
         class ResultsExpected(TypedDict):
             subject: List[Subject]
             plaintiff: str
@@ -355,6 +567,7 @@ class Latex:
             opinions: List[Opinion]
             label: Label
             notes: str
+
         for key, expected_type in ResultsExpected.__annotations__.items():
             if key not in results:
                 log.error(f"Case brief is missing {key}.")
@@ -375,37 +588,43 @@ class Latex:
             process = QProcess()
             args: list[str] = [
                 "--output-dir=./TMP",
-                "--pdf-engine=pdflatex",                 # or xelatex/lualatex
-                "--pdf-engine-opt=-shell-escape",        # <-- include the leading dash
-                str(pdf_file)
+                "--pdf-engine=pdflatex",  # or xelatex/lualatex
+                "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
+                str(pdf_file),
             ]
             process.setProgram(str(self.engine_path))
             process.setArguments(args)
             process.start()
             process.waitForFinished()
-            if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
+            if (
+                process.exitStatus() != QProcess.ExitStatus.NormalExit
+                or process.exitCode() != 0
+            ):
                 error_output = process.readAllStandardError().data().decode()
                 log.error(f"Error compiling {tex_file} to PDF: {error_output}")
-                raise RuntimeError(f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors.")
+                raise RuntimeError(
+                    f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
+                )
             else:
                 clean_dir(str(self.tex_dir))
             log.info(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
             log.error(f"Error compiling {tex_file} to PDF: {e}")
-            raise RuntimeError(f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors.")
-
-
+            raise RuntimeError(
+                f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
+            )
 
 
 class Subject:
     """A class to represent a legal subject."""
+
     def __init__(self, name: str):
         self.name = name
 
     def __str__(self) -> str:
         return self.name
-    
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Subject):
             return self.name == other.name
@@ -416,9 +635,11 @@ class Subject:
 
     def __repr__(self) -> str:
         return f"Subject(name={self.name})"
-    
+
+
 class Label:
     """A class to represent the citable label of a case."""
+
     def __init__(self, label: str):
         self.text = label
 
@@ -435,15 +656,18 @@ class Label:
 
     def __repr__(self) -> str:
         return f"Label(label={self.text})"
-    
+
+
 class Opinion:
     """A class to represent a court opinion."""
+
     def __init__(self, author: str, text: str):
         self.author = author
         self.text = text
 
     def __str__(self) -> str:
         return f"{self.author}: {self.text}\n"
+
 
 class CaseBrief:
     """
@@ -465,21 +689,24 @@ class CaseBrief:
         label (Label): A Label object representing the citable label of the case.
         notes (str): A string containing any additional notes about the case.
     """
-    def __init__(self, 
-                 subject: list[Subject],
-                 plaintiff: str,
-                 defendant: str,
-                 citation: str,
-                 course: str,
-                 facts: str,
-                 procedure: str,
-                 issue: str,
-                 holding: str,
-                 principle: str,
-                 reasoning: str,
-                 opinions: list[Opinion],
-                 label: Label,
-                 notes: str):
+
+    def __init__(
+        self,
+        subject: list[Subject],
+        plaintiff: str,
+        defendant: str,
+        citation: str,
+        course: str,
+        facts: str,
+        procedure: str,
+        issue: str,
+        holding: str,
+        principle: str,
+        reasoning: str,
+        opinions: list[Opinion],
+        label: Label,
+        notes: str,
+    ):
         """
         Initialize a CaseBrief object.
 
@@ -590,25 +817,50 @@ class CaseBrief:
         """Get the path to the PDF file for this case brief."""
         return str(CASES_DIR / f"{self.filename}.pdf")
 
-    
     def to_latex(self) -> str:
         """Generate a LaTeX representation of the case brief."""
         citation_str = tex_escape(self.citation)
-        subjects_str = ', '.join(str(s) for s in self.subject)
-        opinions_str = ('\n').join(str(op) for op in self.opinions)
-        opinions_str = tex_escape(opinions_str)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
-        opinions_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), opinions_str)
+        subjects_str = ", ".join(str(s) for s in self.subject)
+        opinions_str = ("\n").join(str(op) for op in self.opinions)
+        opinions_str = tex_escape(
+            opinions_str
+        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+        opinions_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            opinions_str,
+        )
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
-        facts_str = tex_escape(self.facts)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
-        facts_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), facts_str)
+        facts_str = tex_escape(
+            self.facts
+        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+        facts_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            facts_str,
+        )
         procedure_str = tex_escape(self.procedure)
-        procedure_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), procedure_str)
+        procedure_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            procedure_str,
+        )
         issue_str = tex_escape(self.issue)
-        issue_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), issue_str)
+        issue_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            issue_str,
+        )
         principle_str = tex_escape(self.principle)
         reasoning_str = tex_escape(self.reasoning)
-        notes_str = tex_escape(self.notes)#.replace('\n', r'\\'+'\n').replace("$", r"\$")
-        notes_str = re.sub(r'CITE\((.*?)\)', lambda m: case_briefs.sql.cite_case_brief(m.group(1)), notes_str)
+        notes_str = tex_escape(
+            self.notes
+        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+        notes_str = re.sub(
+            r"CITE\((.*?)\)",
+            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            notes_str,
+        )
 
         return """
             \\documentclass[../tex_src/CaseBriefs.tex]{subfiles}
@@ -630,29 +882,32 @@ class CaseBrief:
                     notes={%s}
             }
             \\end{document}
-        """ % (subjects_str,
-               self.plaintiff,
-               self.defendant,
-               citation_str,
-               self.course,
-               facts_str,
-               procedure_str,
-               issue_str,
-               self.holding,
-               principle_str,
-               reasoning_str,
-               opinions_str,
-               self.label,
-               notes_str)
-    
+        """ % (
+            subjects_str,
+            self.plaintiff,
+            self.defendant,
+            citation_str,
+            self.course,
+            facts_str,
+            procedure_str,
+            issue_str,
+            self.holding,
+            principle_str,
+            reasoning_str,
+            opinions_str,
+            self.label,
+            notes_str,
+        )
+
     def to_sql(self) -> None:
         log.debug(f"Saving case brief '{self.label.text}' to SQL database")
-        conn = sqlite3.connect(str(SQL_FILE))
+        conn = sqlite3.connect(str(SQL_DST_FILE))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         try:
             # Insert or update the main case brief information
-            curr.execute("""
+            curr.execute(
+                """
                 INSERT INTO Cases (label, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(label) DO UPDATE SET
@@ -667,25 +922,31 @@ class CaseBrief:
                     principle=excluded.principle,
                     reasoning=excluded.reasoning,
                     notes=excluded.notes
-            """, (
-                self.label.text,
-                self.plaintiff,
-                self.defendant,
-                self.citation,
-                self.course,
-                self.facts,
-                self.procedure,
-                self.issue,
-                self.holding,
-                self.principle,
-                self.reasoning,
-                self.notes
-            ))
+            """,
+                (
+                    self.label.text,
+                    self.plaintiff,
+                    self.defendant,
+                    self.citation,
+                    self.course,
+                    self.facts,
+                    self.procedure,
+                    self.issue,
+                    self.holding,
+                    self.principle,
+                    self.reasoning,
+                    self.notes,
+                ),
+            )
 
             # Clear existing subjects and opinions
             log.debug("Deleting existing subjects and opinions")
-            curr.execute("DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,))
-            curr.execute("DELETE FROM CaseOpinions WHERE case_label = ?", (self.label.text,))
+            curr.execute(
+                "DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,)
+            )
+            curr.execute(
+                "DELETE FROM CaseOpinions WHERE case_label = ?", (self.label.text,)
+            )
 
             # Insert subjects
             for subject in self.subject:
@@ -693,23 +954,47 @@ class CaseBrief:
                 curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
                 subject_id = curr.fetchone()
                 if not subject_id:
-                    curr.execute("INSERT INTO Subjects (name) VALUES (?)", (subject.name,))
-                    curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
+                    curr.execute(
+                        "INSERT INTO Subjects (name) VALUES (?)", (subject.name,)
+                    )
+                    curr.execute(
+                        "SELECT id FROM Subjects where name = ?", (subject.name,)
+                    )
                     subject_id = curr.fetchone()
                 subject_id = subject_id[0]
-                curr.execute("INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)", (self.label.text, subject_id,))
+                curr.execute(
+                    "INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)",
+                    (
+                        self.label.text,
+                        subject_id,
+                    ),
+                )
 
             # Insert opinions
             for opinion in self.opinions:
                 log.trace("Saving Opinion By: ", opinion.author)
-                curr.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
+                curr.execute(
+                    "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
+                )
                 opinion_id = curr.fetchone()
                 if not opinion_id:
-                    curr.execute("INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)", (opinion.author, opinion.text,))
-                    curr.execute("SELECT id FROM Opinions where opinion_text = ?", (opinion.text,))
+                    curr.execute(
+                        "INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)",
+                        (
+                            opinion.author,
+                            opinion.text,
+                        ),
+                    )
+                    curr.execute(
+                        "SELECT id FROM Opinions where opinion_text = ?",
+                        (opinion.text,),
+                    )
                     opinion_id = curr.fetchone()
                 opinion_id = opinion_id[0]
-                curr.execute("INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)", (self.label.text, opinion_id))
+                curr.execute(
+                    "INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)",
+                    (self.label.text, opinion_id),
+                )
 
             conn.commit()
         except sqlite3.Error as e:
@@ -720,11 +1005,11 @@ class CaseBrief:
 
     def save_to_file(self, filename: str) -> None:
         """Save the LaTeX representation of the case brief to a file."""
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             f.write(self.to_latex())
         log.info(f"Saved Latex to {filename}")
 
-    def compile_to_pdf(self) -> str|None:
+    def compile_to_pdf(self) -> str | None:
         """Compile the LaTeX file to PDF."""
         tex_file = CASES_DIR / f"{self.filename}.tex"
         self.save_to_file(str(tex_file))
@@ -733,10 +1018,13 @@ class CaseBrief:
             os.remove(pdf_file)
         try:
             process: QProcess = QProcess()
-            process.start(str(WRITE_DIR / "bin" / "tinitex"), [str(tex_file)])
-            #process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
+            process.start(str(RES_DIR / "bin" / "tinitex"), [str(tex_file)])
+            # process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
-            if process.exitStatus() != QProcess.ExitStatus.NormalExit or process.exitCode() != 0:
+            if (
+                process.exitStatus() != QProcess.ExitStatus.NormalExit
+                or process.exitCode() != 0
+            ):
                 error_output = process.readAllStandardError().data().decode()
                 log.error(f"Error compiling {tex_file} to PDF: {error_output}")
                 return
@@ -746,90 +1034,145 @@ class CaseBrief:
             return pdf_file
         except Exception as e:
             log.error(f"Error compiling {tex_file} to PDF: {e}")
-            raise RuntimeError(f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors.")
-        
+            raise RuntimeError(
+                f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
+            )
 
     @staticmethod
-    def load_from_file(filename: str) -> 'CaseBrief':
+    def load_from_file(filename: str) -> "CaseBrief":
         """Load a case brief from a LaTeX file."""
         log.debug(f"Loading case brief from {filename}")
-        with open(filename, 'r') as f:
+        with open(filename, "r") as f:
             content = f.read()
             # Here you would parse the content to extract the case brief details
             # This is a placeholder implementation
-            regex = r'\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}'
+            regex = r"\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}"
             match = re.search(regex, content, re.DOTALL)
             if match:
-                subjects = [Subject(s.strip()) for s in match.group(1).split(',') if s.strip()]
+                subjects = [
+                    Subject(s.strip()) for s in match.group(1).split(",") if s.strip()
+                ]
                 plaintiff = match.group(2).strip()
                 defendant = match.group(3).strip()
                 citation = tex_unescape(match.group(4).strip())
                 course = match.group(5).strip()
-                facts = tex_unescape(match.group(6).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                facts = tex_unescape(
+                    match.group(6).strip()
+                )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
-                citation_regex = r'\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}'
-                facts = re.sub(citation_regex, r'CITE(\1)', facts)
-                procedure = tex_unescape(match.group(7).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                citation_regex = r"\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}"
+                facts = re.sub(citation_regex, r"CITE(\1)", facts)
+                procedure = tex_unescape(
+                    match.group(7).strip()
+                )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
-                procedure = re.sub(citation_regex, r'CITE(\1)', procedure)
-                issue = tex_unescape(match.group(8).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                procedure = re.sub(citation_regex, r"CITE(\1)", procedure)
+                issue = tex_unescape(
+                    match.group(8).strip()
+                )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
                 # Regex replace existing citations with the CITE(\1)
-                issue = re.sub(citation_regex, r'CITE(\1)', issue)
+                issue = re.sub(citation_regex, r"CITE(\1)", issue)
                 holding = match.group(9).strip()
                 principle = tex_unescape(match.group(10).strip())
-                reasoning = tex_unescape(match.group(11).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-                opinions = [Opinion(o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()) for o in re.sub(citation_regex, r'CITE(\1)', tex_unescape(match.group(12))) if o.strip()]
+                reasoning = tex_unescape(
+                    match.group(11).strip()
+                )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                opinions = [
+                    Opinion(
+                        o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()
+                    )
+                    for o in re.sub(
+                        citation_regex, r"CITE(\1)", tex_unescape(match.group(12))
+                    )
+                    if o.strip()
+                ]
                 label = Label(match.group(13).strip())
-                notes = tex_unescape(match.group(14).strip())#.replace(r'\\'+'\n', '\n').replace(r"\$", "$")
+                notes = tex_unescape(
+                    match.group(14).strip()
+                )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             else:
-                log.error(f"Failed to parse case brief from {filename}. The file may not be in the correct format.")
-                raise RuntimeError(f"Failed to parse case brief from {filename}. The file may not be in the correct format.")
+                log.error(
+                    f"Failed to parse case brief from {filename}. The file may not be in the correct format."
+                )
+                raise RuntimeError(
+                    f"Failed to parse case brief from {filename}. The file may not be in the correct format."
+                )
 
-            return CaseBrief(subjects, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, opinions, label, notes)
+            return CaseBrief(
+                subjects,
+                plaintiff,
+                defendant,
+                citation,
+                course,
+                facts,
+                procedure,
+                issue,
+                holding,
+                principle,
+                reasoning,
+                opinions,
+                label,
+                notes,
+            )
 
     @staticmethod
-    def load_from_sql(case_label: str) -> 'CaseBrief':
+    def load_from_sql(case_label: str) -> "CaseBrief":
         """Load a case brief from the SQL database by its label."""
         log.debug(f"Loading case brief from SQL with label {case_label}")
-        conn = sqlite3.connect(str(SQL_FILE))
+        conn = sqlite3.connect(str(SQL_DST_FILE))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
-        curr.execute("SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?", (case_label,))
+        curr.execute(
+            "SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?",
+            (case_label,),
+        )
         cur_case = curr.fetchone()
         if not cur_case:
             log.error(f"No case brief found with label '{case_label}' in the database.")
-            raise RuntimeError(f"No case brief found with label '{case_label}' in the database.")
-        curr.execute("SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?", (case_label,))
+            raise RuntimeError(
+                f"No case brief found with label '{case_label}' in the database."
+            )
+        curr.execute(
+            "SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?",
+            (case_label,),
+        )
         opinions = [Opinion(*opinion) for opinion in curr.fetchall()]
-        curr.execute("SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?", (case_label,))
+        curr.execute(
+            "SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?",
+            (case_label,),
+        )
         subjects = [Subject(subject[-1]) for subject in curr.fetchall()]
         # Assuming the database schema matches the order of fields in CaseBrief
-        case_brief = CaseBrief(subject=subjects,
-                               opinions=opinions,
-                               plaintiff=cur_case[0],
-                               defendant=cur_case[1],
-                               citation=cur_case[2],
-                               course=cur_case[3],
-                               facts=cur_case[4],
-                               procedure=cur_case[5],
-                               issue=cur_case[6],
-                               holding=cur_case[7],
-                               principle=cur_case[8],
-                               reasoning=cur_case[9],
-                               label=Label(cur_case[10]),
-                               notes=cur_case[11])
+        case_brief = CaseBrief(
+            subject=subjects,
+            opinions=opinions,
+            plaintiff=cur_case[0],
+            defendant=cur_case[1],
+            citation=cur_case[2],
+            course=cur_case[3],
+            facts=cur_case[4],
+            procedure=cur_case[5],
+            issue=cur_case[6],
+            holding=cur_case[7],
+            principle=cur_case[8],
+            reasoning=cur_case[9],
+            label=Label(cur_case[10]),
+            notes=cur_case[11],
+        )
         return case_brief
-    
+
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, CaseBrief):
             return False
         return self.label.text == value.label.text
-    
+
+
 class CaseBriefs:
     """A class to manage multiple case briefs."""
+
     def __init__(self):
         self.case_briefs: list[CaseBrief] = []
-        self.sql = SQL(db_path=str(SQL_FILE))
+        self.sql = SQL(db_path=str(SQL_DST_FILE))
         self.latex = Latex()
 
     def reload_cases_tex(self) -> None:
@@ -870,6 +1213,7 @@ class CaseBriefs:
     def get_case_briefs(self) -> list[CaseBrief]:
         """Get all case briefs in the collection."""
         return sorted(self.case_briefs, key=lambda cb: cb.label.text)
+
     """
     def reload_cases_tex(self) -> None:
         \"""Reload all case briefs from the ./Cases directory.""\"
@@ -896,7 +1240,6 @@ class CaseBriefs:
                 self.add_case_brief(case_brief)
         conn.close()"""
 
-    
     """
     def cite_case_brief(self, case_brief_label: str) -> str:
         \"""Cite a case brief by its label.""\"
@@ -939,13 +1282,14 @@ class CaseBriefs:
 
 
 def reload_subjects(case_briefs: list[CaseBrief]) -> list[Subject]:
-        log.debug("Reloading subjects from case briefs")
-        subjects: list[Subject] = []    
-        for case_brief in case_briefs:
-            for subject in case_brief.subject:
-                if subject not in subjects:
-                    subjects.append(subject)
-        return subjects
+    log.debug("Reloading subjects from case briefs")
+    subjects: list[Subject] = []
+    for case_brief in case_briefs:
+        for subject in case_brief.subject:
+            if subject not in subjects:
+                subjects.append(subject)
+    return subjects
+
 
 def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
     log.debug("Reloading labels from case briefs")
@@ -955,62 +1299,8 @@ def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
             labels.append(case_brief.label)
     return labels
 
-from pathlib import Path
-
-APP_NAME = "CaseBriefs"
-
-def app_dirs():
-    # Where to READ bundled resources (inside .app or onefile temp)
-    if getattr(sys, "frozen", False):
-        log.info("Running in a bundled environment")
-        resources_dir = Path(sys._MEIPASS)  # type: ignore # PyInstaller unpack dir
-        bundle_dir = Path(sys.executable).resolve().parents[2]  # .../CaseBriefs.app/Contents
-    else:
-        log.info("Running in a development environment")
-        resources_dir = Path(__file__).resolve().parent
-        bundle_dir = resources_dir
-
-    log.debug(f"Resources Directory: {resources_dir}")
-    log.debug(f"Bundle Directory: {bundle_dir}")
-
-    # Where to WRITE user data (never write into the .app)
-    if resources_dir == bundle_dir:
-        log.debug("Using local directory for writable data")
-        writable_dir = bundle_dir
-    else:
-        try:
-            # macOS Application Support path
-            from PyQt6.QtCore import QStandardPaths
-            base = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))  / "CaseBrief"
-            writable_dir = Path(base) if base else Path.home() / "Library" / "Application Support" / "CaseBrief" # APP_NAME
-        except Exception:
-            writable_dir = Path.home() / "Library" / "Application Support" / "CaseBrief"# APP_NAME
-        log.debug(f"Writable Directory: {writable_dir}")
-        writable_dir.mkdir(parents=True, exist_ok=True)
-    return resources_dir, bundle_dir, writable_dir
-
-global RES_DIR, BUNDLE_DIR, WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, SQL_DIR, SQL_SRC_DIR, SQL_FILE, SQL_CREATE, MSTR_TEX
-RES_DIR, BUNDLE_DIR, WRITE_DIR = app_dirs()
-
-# Example subfolders you were creating relatively before:
-TMP_DIR     = WRITE_DIR / "TMP"
-CASES_DIR   = WRITE_DIR / "Cases"
-TEX_SRC_DIR = RES_DIR / "tex_src"
-MSTR_TEX = TEX_SRC_DIR / "CaseBriefs.tex"
-SQL_DIR     = WRITE_DIR / "SQL"
-SQL_FILE    = SQL_DIR / "Cases.sqlite"
-SQL_SRC_DIR = RES_DIR / "SQL"
-SQL_CREATE  = SQL_SRC_DIR / "Create_DB.sql"
-
-for d in (WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, SQL_DIR, SQL_SRC_DIR):
-    d.mkdir(parents=True, exist_ok=True)
-
-log.debug(f"Base Directory: {WRITE_DIR}")
 
 global case_briefs, subjects, labels
 case_briefs = CaseBriefs()
 subjects = reload_subjects(case_briefs.get_case_briefs())
 labels = reload_labels(case_briefs.get_case_briefs())
-
-
-

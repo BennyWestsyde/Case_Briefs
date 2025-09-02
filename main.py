@@ -24,13 +24,15 @@ The resulting Latex document will be assembled as such:
 """
 
 from logger import StructuredLogger
-log = StructuredLogger("Main","TRACE","CaseBriefs.log",True,None,True,True)
+from CaseBrief import WRITE_DIR
+
+log = StructuredLogger(
+    "Main", "TRACE", str(WRITE_DIR / "CaseBriefs.log"), True, None, True, True
+)
 
 log.info("Starting Case Briefs Application")
 import sys
-from PyQt6.QtWidgets import (
-    QApplication
-)
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from GUI import CaseBriefInit, CaseBriefApp
 
@@ -40,7 +42,7 @@ from GUI import CaseBriefInit, CaseBriefApp
 if __name__ == "__main__":
     # Create a simple gui for the application
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon('ui/text.book.closed.png'))
+    app.setWindowIcon(QIcon("ui/text.book.closed.png"))
     window = CaseBriefInit()
     window.show()
     if window.initializer.complete:
