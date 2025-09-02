@@ -1,0 +1,43 @@
+name: Build macOS App (PyInstaller)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Run the job for both Intel (x86_64) and Apple Silicon (arm64) macOS
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-13    # macOS runner on Intel (x86_64):contentReference[oaicite:3]{index=3}
+          - arch: arm64
+            runner: macos-14    # macOS runner on Apple Silicon (arm64):contentReference[oaicite:4]{index=4}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'  # or an appropriate version for the project
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyqt6 pyspellchecker
+
+      - name: Build application with PyInstaller
+        run: pyinstaller CaseBriefs.spec  # Uses the spec file to build the app:contentReference[oaicite:5]{index=5}
+
+      - name: Archive app bundle
+        run: |
+          # Create a ZIP archive of the built application bundle
+          cd dist && zip -r "CaseBriefs-${{ matrix.arch }}.zip" "CaseBriefs.app"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: CaseBriefs-${{ matrix.arch }}
+          path: dist/CaseBriefs-${{ matrix.arch }}.zip
