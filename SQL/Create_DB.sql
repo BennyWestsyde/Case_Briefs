@@ -4,6 +4,11 @@ CREATE TABLE "Courses" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL UNIQUE
 );
+INSERT INTO "Courses" (name) VALUES
+    ('Contracts'),
+    ('Torts'),
+    ('Civil Procedure'),
+    ('Legal Practice');
 
 DROP TABLE IF EXISTS "Subjects";
 CREATE TABLE "Subjects" (
