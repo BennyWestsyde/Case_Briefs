@@ -5,6 +5,7 @@
 ../Cases/Continental_Laboratories_V_Scott_Paper_Co.tex
 ../Cases/Day_V_Caton.tex
 ../Cases/Dickinson_V_Dodds.tex
+../Cases/Dougherty_V_Stepp.tex
 ../Cases/Enright_V_Groves.tex
 ../Cases/Fisher_V_Carrousel_Moter_Hotel,_Inc.tex
 ../Cases/Fujimoto_V_Rio_Grande_Pickle_Co.tex
@@ -12,6 +13,7 @@
 ../Cases/Hardy_V_LaBelle's_Distributing_Co.tex
 ../Cases/Harris_V_Jones.tex
 ../Cases/Hawkins_V_McGee.tex
+../Cases/Herrin_V_Sutherland.tex
 ../Cases/Kolodziej_V_Mason.tex
 ../Cases/Lefkowitz_V_Greater_Minneapolis_Surplus_Store,_Inc.tex
 ../Cases/Loring_V_City_Of_Boston.tex
@@ -27,6 +29,7 @@
 ../Cases/State_Rubbish_Collectors_Ass'n_V_Siliznoff.tex
 ../Cases/Stepp_V_Freeman.tex
 ../Cases/Talmage_V_Smith.tex
+../Cases/Taylor_V_Vallelunga.tex
 ../Cases/Volker_Court,_LLC_V_Santa_Fe_Apartments,_LCC.tex
 ../Cases/Wagner_V_State.tex
 ../Cases/Wallace_V_Rosen.tex
