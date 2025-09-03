@@ -1,5 +1,6 @@
 # Case Brief Manager
 [![Build macOS App (PyInstaller)](https://github.com/BennyWestsyde/Case_Briefs/actions/workflows/compile.yml/badge.svg)](https://github.com/BennyWestsyde/Case_Briefs/actions/workflows/compile.yml)
+
 This application is for creating and managing case briefs for 1L's
 
 # How to Use
