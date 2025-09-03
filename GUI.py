@@ -813,7 +813,7 @@ class SettingsWindow(QWidget):
         layout.addWidget(self.paths_label, 0, 0)
         self.case_render_path_label = QLabel(f"Case Render Path: ")
         layout.addWidget(self.case_render_path_label, 1, 0)
-        self.case_render_path = QLabel(f"{global_vars.cases_dir}")
+        self.case_render_path = QLabel(f"{global_vars.cases_output_dir}")
         layout.addWidget(self.case_render_path, 2, 0)
         self.case_render_path_selector = QFileDialog()
         self.case_render_path_button = QPushButton("Change")
@@ -950,7 +950,7 @@ class SettingsWindow(QWidget):
         if selected_dir and selected_dir != current_path and selected_dir != Path():
             self.case_render_path.setText(f"{selected_dir}")
             global global_vars
-            global_vars.cases_dir = Path(selected_dir)
+            global_vars.cases_output_dir = Path(selected_dir)
             log.debug(f"Set case render path to {selected_dir}")
         else:
             self.case_render_path.setText(f"{current_path}")
@@ -999,6 +999,7 @@ class Initializer:
         self._todo: list[tuple[Callable[..., None], tuple[Path, ...]]] = [
             (self.ensure_dir, (global_vars.tmp_dir,)),
             (self.ensure_dir, (global_vars.cases_dir,)),
+            (self.ensure_dir, (global_vars.cases_output_dir,)),
             (self.ensure_dir, (global_vars.tex_src_dir,)),
             (self.ensure_file, (global_vars.master_src_tex,)),
             (self.ensure_file, (global_vars.master_src_sty,)),

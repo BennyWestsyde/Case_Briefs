@@ -28,6 +28,7 @@ class Global_Vars:
         self.res_dir, self.bundle_dir, self.write_dir = self.app_dirs()
         self.tmp_dir: Path = Path()
         self.cases_dir: Path = Path()
+        self.cases_output_dir: Path = Path()
         self.tex_src_dir: Path = Path()
         self.tex_dst_dir: Path = Path()
         self.master_src_tex: Path = Path()
@@ -48,6 +49,9 @@ class Global_Vars:
             self.write_dir = results.get("write_dir", self.write_dir)
             self.tmp_dir = results.get("tmp_dir", self.tmp_dir)
             self.cases_dir = results.get("cases_dir", self.cases_dir)
+            self.cases_output_dir = results.get(
+                "cases_output_dir", self.cases_output_dir
+            )
             self.tex_src_dir = results.get("tex_src_dir", self.tex_src_dir)
             self.tex_dst_dir = results.get("tex_dst_dir", self.tex_dst_dir)
             self.master_src_tex = results.get("master_src_tex", self.master_src_tex)
@@ -64,6 +68,7 @@ class Global_Vars:
             self.log.warning("No global variables found in JSON")
             self.tmp_dir = self.write_dir / "TMP"
             self.cases_dir = self.write_dir / "Cases"
+            self.cases_output_dir = self.write_dir / "Cases" / "Output"
             self.tex_src_dir = self.res_dir / "tex_src"
             self.tex_dst_dir = self.write_dir / "tex_src"
             self.master_src_tex = self.tex_src_dir / "CaseBriefs.tex"
@@ -81,6 +86,7 @@ class Global_Vars:
             self.write_dir,
             self.tmp_dir,
             self.cases_dir,
+            self.cases_output_dir,
             self.tex_src_dir,
             self.tex_dst_dir,
             self.sql_src_dir,
@@ -573,8 +579,8 @@ class Latex:
 
     def __init__(self):
         self.engine_path: Path = global_vars.write_dir / "bin" / "tinitex"
-        self.tex_dir: Path = strict_path(global_vars.cases_dir)
-        self.render_dir: Path = strict_path(global_vars.cases_dir)
+        self.tex_dir: Path = global_vars.cases_dir
+        self.render_dir: Path = global_vars.cases_output_dir
 
     def _brief2Latex(self, brief: "CaseBrief") -> str:
         """Convert a CaseBrief object to its LaTeX representation."""
@@ -1010,7 +1016,7 @@ class CaseBrief:
 
     def get_pdf_path(self) -> str:
         """Get the path to the PDF file for this case brief."""
-        return str(strict_path(global_vars.cases_dir) / f"{self.filename}.pdf")
+        return str(strict_path(global_vars.cases_output_dir) / f"{self.filename}.pdf")
 
     def to_latex(self) -> str:
         """Generate a LaTeX representation of the case brief."""
