@@ -932,6 +932,7 @@ class SettingsWindow(QWidget):
         log.debug("Restoring cases")
         backup_path = Path(self.backup_location.text())
         case_briefs.sql.restore_db_file(backup_path)
+        case_briefs.reload_cases_sql()
         log.info(f"Cases restored from {backup_path}")
         # Popup a confirmation
         QMessageBox.information(
