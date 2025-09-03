@@ -1,14 +1,17 @@
 from __future__ import annotations
+from datetime import datetime
 import os
 from pathlib import Path
 import re
 import shutil
 from PyQt6.QtWidgets import (
+    QFileDialog,
     QScrollArea,
     QGridLayout,
     QLayoutItem,
     QMainWindow,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
     QListWidget,
@@ -23,8 +26,6 @@ from PyQt6.QtGui import QDesktopServices
 from cleanup import clean_dir
 from typing import Any, Callable
 from CaseBrief import (
-    SQL_DST_DIR,
-    SQL_DST_FILE,
     CaseBrief,
     Subject,
     Label,
@@ -33,22 +34,19 @@ from CaseBrief import (
     case_briefs,
     subjects,
     SQL,
-    WRITE_DIR,
-    RES_DIR,
-    TMP_DIR,
-    CASES_DIR,
-    TEX_SRC_DIR,
-    TEX_DST_DIR,
-    MASTER_DST_STY,
-    MASTER_DST_TEX,
-    MASTER_SRC_STY,
-    MASTER_SRC_TEX,
+    global_vars,
 )
 
 from logger import StructuredLogger
 
 log = StructuredLogger(
-    "GUI", "TRACE", str(WRITE_DIR / "CaseBriefs.log"), True, None, True, True
+    "GUI",
+    "TRACE",
+    str(global_vars.write_dir / "CaseBriefs.log"),
+    True,
+    None,
+    True,
+    True,
 )
 
 from PyQt6.QtWidgets import QTextEdit
@@ -275,7 +273,7 @@ class CaseBriefCreator(QWidget):
         # Subject box entry: a text box to enter subjects. When the user presses enter, the subject is added to a list of subjects.
         self.class_selector = QComboBox()
         self.class_selector.setPlaceholderText("Select a class")
-        subjects_str_list = ["Contracts", "Torts", "Civil Procedure", "Legal Practice"]
+        subjects_str_list = case_briefs.sql.fetchCourses()
         self.class_selector.addItems(
             subjects_str_list
         )  # pyright: ignore[reportUnknownMemberType]
@@ -317,7 +315,9 @@ class CaseBriefCreator(QWidget):
         # Remove a subject when it is selected and the user presses delete
         subjects_list.itemDoubleClicked.connect(
             lambda: (
-                self.remove_subject(subjects_list.currentItem().text())
+                self.remove_subject(
+                    subjects_list.currentItem().text()  # pyright: ignore[reportOptionalMemberAccess]
+                )
                 if subjects_list.currentItem()
                 else None
             )
@@ -453,9 +453,9 @@ class CaseBriefCreator(QWidget):
         if subjects_list is not None:
             subjects_list.clear()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
             for subject in self.current_subjects_str_list:
-                subjects_list.addItem(
+                subjects_list.addItem(  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
                     subject
-                )  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+                )
 
     def verify_label(self, label: str) -> bool:
         """Verify if the label is unique."""
@@ -565,7 +565,7 @@ class CaseBriefManager(QWidget):
         self.class_dropdown = QComboBox()
         self.class_dropdown.setPlaceholderText("Select a class...")
         self.class_dropdown.addItems(
-            ["All", "Torts", "Contracts", "Civil Procedure"]
+            ["All"] + case_briefs.sql.fetchCourses()
         )  # pyright: ignore[reportUnknownMemberType]
         self.class_dropdown.currentIndexChanged.connect(
             lambda: self.filter_by_search(
@@ -783,16 +783,188 @@ class SettingsWindow(QWidget):
         log.info("Initializing Settings Window")
         self.setWindowTitle("Settings")
         self.setGeometry(150, 150, 400, 300)
-        layout = QVBoxLayout()
-        classes_label = QLabel("Classes:")
-        layout.addWidget(classes_label)
-        classes_combo = QComboBox()
-        classes_combo.addItems(
-            ["Class 1", "Class 2", "Class 3"]
+        self.tabs = QTabWidget()
+        main_layout = QVBoxLayout()
+
+        # Courses Tab Layout
+        self.courses_tab = QWidget()
+        layout = QGridLayout()
+        self.classes_label = QLabel("Classes:")
+        layout.addWidget(self.classes_label, 0, 0)
+        self.new_class_input = QLineEdit()
+        layout.addWidget(self.new_class_input, 1, 0)
+        self.add_class_button = QPushButton("Add Class")
+        layout.addWidget(self.add_class_button, 1, 1)
+        self.add_class_button.clicked.connect(self.add_class)
+        self.remove_class_button = QPushButton("Remove Class")
+        layout.addWidget(self.remove_class_button, 1, 2)
+        self.remove_class_button.clicked.connect(self.remove_class)
+        self.classes_list = QListWidget()
+        self.classes_list.addItems(
+            case_briefs.sql.fetchCourses()
         )  # pyright: ignore[reportUnknownMemberType] # Example classes
-        layout.addWidget(classes_combo)
-        self.setLayout(layout)
+        layout.addWidget(self.classes_list, 2, 0, 1, 3)
+        self.courses_tab.setLayout(layout)
+
+        # Paths Tab Layout
+        self.paths_tab = QWidget()
+        layout = QGridLayout()
+        self.paths_label = QLabel("Paths:")
+        layout.addWidget(self.paths_label, 0, 0)
+        self.case_render_path_label = QLabel(f"Case Render Path: ")
+        layout.addWidget(self.case_render_path_label, 1, 0)
+        self.case_render_path = QLabel(f"{global_vars.cases_dir}")
+        layout.addWidget(self.case_render_path, 2, 0)
+        self.case_render_path_selector = QFileDialog()
+        self.case_render_path_button = QPushButton("Change")
+        layout.addWidget(self.case_render_path_button, 2, 1)
+        self.case_render_path_button.clicked.connect(self.select_case_render_path)
+        self.paths_tab.setLayout(layout)
+
+        # Backup and Restore Tab
+        self.backup_tab = QWidget()
+        layout = QGridLayout()
+        # Select the Backup Location
+        self.backup_location_label = QLabel("Backup Location:")
+        layout.addWidget(self.backup_location_label, 0, 0, 1, 1)
+        self.backup_restore_toggle = QPushButton("Backup")
+        self.backup_restore_toggle.setCheckable(True)
+        self.backup_restore_toggle.setStyleSheet(
+            "background-color: green; color: white;"
+        )
+        self.backup_restore_toggle.toggled.connect(self.toggle_backup_restore)
+        layout.addWidget(self.backup_restore_toggle, 0, 2)
+        self.backup_location = QLabel(f"{global_vars.backup_location}")
+        layout.addWidget(self.backup_location, 1, 0, 1, 3)
+        self.backup_location_selector = QFileDialog()
+        self.backup_location_button = QPushButton("Change")
+        layout.addWidget(self.backup_location_button, 2, 0, 1, 2)
+        self.backup_location_button.clicked.connect(self.select_backup_location)
+        self.backup_restore_execute = QPushButton("Execute")
+        layout.addWidget(self.backup_restore_execute, 2, 2)
+        self.backup_restore_execute.clicked.connect(self.execute_backup_restore)
+        self.backup_tab.setLayout(layout)
+
+        self.tabs.addTab(self.courses_tab, "Courses")
+        self.tabs.addTab(self.paths_tab, "Paths")
+        self.tabs.addTab(self.backup_tab, "Backup/Restore")
+        main_layout.addWidget(self.tabs)
+        self.setLayout(main_layout)
         self.setWindowTitle("Case Briefs Settings")
+
+    def execute_backup_restore(self):
+        log.debug("Executing backup/restore")
+        if self.backup_restore_toggle.text() == "Backup":
+            self.backup_cases()
+        elif self.backup_restore_toggle.text() == "Restore":
+            self.restore_cases()
+
+    def toggle_backup_restore(self):
+        log.debug("Toggling backup/restore")
+        if self.backup_restore_toggle.text() == "Backup":
+            self.backup_restore_toggle.setText("Restore")
+            self.backup_restore_toggle.setStyleSheet(
+                "background-color: red; color: white;"
+            )
+            self.backup_location_button.clicked.disconnect()
+            self.backup_location_button.clicked.connect(self.select_restore_location)
+        elif self.backup_restore_toggle.text() == "Restore":
+            self.backup_restore_toggle.setText("Backup")
+            self.backup_restore_toggle.setStyleSheet(
+                "background-color: green; color: white;"
+            )
+            self.backup_location_button.clicked.disconnect()
+            self.backup_location_button.clicked.connect(self.select_backup_location)
+
+    def select_backup_location(self):
+        log.debug("Selecting backup location")
+        self.backup_location_selector.setFileMode(QFileDialog.FileMode.Directory)
+        self.backup_location_selector.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+
+        current_path = Path(self.backup_location.text())
+        selected_dir = Path(
+            self.backup_location_selector.getExistingDirectory(
+                self, "Select Backup Location", ""
+            )
+        )
+        if selected_dir and selected_dir != current_path and selected_dir != Path():
+            self.backup_location.setText(f"{selected_dir}")
+            global global_vars
+            global_vars.backup_location = Path(selected_dir)
+            log.debug(f"Set backup location to {selected_dir}")
+        else:
+            self.backup_location.setText(f"{current_path}")
+
+    def select_restore_location(self):
+        log.debug("Selecting restore location")
+        self.backup_location_selector.setFileMode(QFileDialog.FileMode.ExistingFile)
+        self.backup_location_selector.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+        self.backup_location_selector.setNameFilter("SQL Files (*.sql)")
+
+        current_path = Path(self.backup_location.text())
+        selected_dir = Path(
+            self.backup_location_selector.getOpenFileName(
+                self, "Select Restore Location", ""
+            )[0]
+        )
+        if selected_dir and selected_dir != current_path and selected_dir != Path():
+            self.backup_location.setText(f"{selected_dir}")
+            global global_vars
+            global_vars.tmp_dir = Path(selected_dir)
+            log.debug(f"Set restore location to {selected_dir}")
+        else:
+            self.backup_location.setText(f"{current_path}")
+
+    def backup_cases(self):
+        log.debug("Backing up cases")
+        curr_dt = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        backup_path = (
+            Path(self.backup_location.text()) / f"CaseBriefBackup_{curr_dt}.sql"
+        )
+        case_briefs.sql.export_db_file(backup_path)
+        log.info(f"Cases backed up to {backup_path}")
+        # Popup a confirmation
+        QMessageBox.information(
+            self, "Backup Complete", f"{len(case_briefs.case_briefs)} cases backed up."
+        )
+
+    def restore_cases(self):
+        log.debug("Restoring cases")
+        backup_path = Path(self.backup_location.text())
+        case_briefs.sql.restore_db_file(backup_path)
+        log.info(f"Cases restored from {backup_path}")
+        # Popup a confirmation
+        QMessageBox.information(
+            self, "Restore Complete", f"{len(case_briefs.case_briefs)} cases restored."
+        )
+
+    def select_case_render_path(self):
+        log.debug("Selecting case render path")
+        current_path = Path(self.case_render_path.text())
+        selected_dir = Path(
+            self.case_render_path_selector.getExistingDirectory(
+                self, "Select Case Render Path", ""
+            )
+        )
+        if selected_dir and selected_dir != current_path and selected_dir != Path():
+            self.case_render_path.setText(f"{selected_dir}")
+            global global_vars
+            global_vars.cases_dir = Path(selected_dir)
+            log.debug(f"Set case render path to {selected_dir}")
+        else:
+            self.case_render_path.setText(f"{current_path}")
+
+    def add_class(self):
+        new_class = self.new_class_input.text()
+        if new_class:
+            case_briefs.sql.addCourse(new_class)
+            self.classes_list.addItem(new_class)
+
+    def remove_class(self):
+        selected_item = self.classes_list.currentItem()
+        if selected_item:
+            case_briefs.sql.removeCourse(selected_item.text())
+            self.classes_list.takeItem(self.classes_list.row(selected_item))
 
     def show(self):
         super().show()
@@ -824,22 +996,22 @@ class Initializer:
         self._on_progress = on_progress
         self._step: int = 0
         self._todo: list[tuple[Callable[..., None], tuple[Path, ...]]] = [
-            (self.ensure_dir, (TMP_DIR,)),
-            (self.ensure_dir, (CASES_DIR,)),
-            (self.ensure_dir, (TEX_SRC_DIR,)),
-            (self.ensure_file, (MASTER_SRC_TEX,)),
-            (self.ensure_file, (MASTER_SRC_STY,)),
-            (self.ensure_dir, (TEX_DST_DIR,)),
+            (self.ensure_dir, (global_vars.tmp_dir,)),
+            (self.ensure_dir, (global_vars.cases_dir,)),
+            (self.ensure_dir, (global_vars.tex_src_dir,)),
+            (self.ensure_file, (global_vars.master_src_tex,)),
+            (self.ensure_file, (global_vars.master_src_sty,)),
+            (self.ensure_dir, (global_vars.tex_dst_dir,)),
             (
                 self.ensure_move,
-                (MASTER_SRC_STY, MASTER_DST_STY),
+                (global_vars.master_src_sty, global_vars.master_dst_sty),
             ),
             (
                 self.ensure_move,
-                (MASTER_SRC_TEX, MASTER_DST_TEX),
+                (global_vars.master_src_tex, global_vars.master_dst_tex),
             ),
-            (self.ensure_dir, (SQL_DST_DIR,)),
-            (self.ensure_db, (SQL_DST_FILE,)),
+            (self.ensure_dir, (global_vars.sql_dst_dir,)),
+            (self.ensure_db, (global_vars.sql_dst_file,)),
         ]
         self._total: int = len(self._todo)  # 4 dirs + 2 files + 1 db
 
@@ -1039,10 +1211,10 @@ class CaseBriefApp(QMainWindow):
         log.info("Rendering PDF for the case brief...")
         try:
             process = QProcess(self)
-            process.setWorkingDirectory(str(WRITE_DIR))
+            process.setWorkingDirectory(str(global_vars.write_dir))
             output_path = "../TMP"
             log.debug(f"Relative output path for LaTeX: {output_path}")
-            program = RES_DIR / "bin" / "tinitex"
+            program = global_vars.res_dir / "bin" / "tinitex"
             program_exists = program.exists()
             if not program_exists:
                 log.error(f"Program not found: {program}")
@@ -1052,7 +1224,7 @@ class CaseBriefApp(QMainWindow):
                 f"--output-dir={output_path}",
                 "--pdf-engine=pdflatex",  # or xelatex/lualatex
                 "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
-                f"{MASTER_DST_TEX}",
+                f"{global_vars.master_dst_tex}",
             ]
             process.setProgram(str(program))
             process.setArguments(args)
@@ -1069,19 +1241,21 @@ class CaseBriefApp(QMainWindow):
                 return
             else:
                 log.info("LaTeX compilation succeeded.")
-                clean_dir(str(TMP_DIR))
+                clean_dir(str(global_vars.tmp_dir))
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
             return
         QMessageBox.information(
             self,
             "PDF Rendered",
-            f"PDF for {MASTER_DST_TEX.stem} has been generated successfully.",
+            f"PDF for {global_vars.master_dst_tex.stem} has been generated successfully.",
         )
         log.info(f"Moving PDF to Downloads folder")
         shutil.move(
-            TMP_DIR / f"{MASTER_DST_TEX.stem}.pdf",
-            os.path.join(Path.home(), "Downloads", f"{MASTER_DST_TEX.stem}.pdf"),
+            global_vars.tmp_dir / f"{global_vars.master_dst_tex.stem}.pdf",
+            os.path.join(
+                Path.home(), "Downloads", f"{global_vars.master_dst_tex.stem}.pdf"
+            ),
         )
         # Here you would typically call the method to generate the PDF
 

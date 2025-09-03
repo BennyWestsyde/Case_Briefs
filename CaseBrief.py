@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 import sys
-from typing import List, TypedDict, Union
+from types import MethodType
+from typing import Any, List, TypedDict, Union
 import os
 from cleanup import clean_dir
 import re
@@ -14,88 +16,179 @@ global APP_NAME
 APP_NAME = "CaseBriefs"
 
 
-def app_dirs():
-    # Where to READ bundled resources (inside .app or onefile temp)
-    log = StructuredLogger("CaseBrief", "TRACE", None, True, None, True, True)
-    if getattr(sys, "frozen", False):
-        log.info("Running in a bundled environment")
-        resources_dir = Path(sys._MEIPASS)  # type: ignore # PyInstaller unpack dir
-        bundle_dir = (
-            Path(sys.executable).resolve().parents[2]
-        )  # .../CaseBriefs.app/Contents
-    else:
-        log.info("Running in a development environment")
-        resources_dir = Path(__file__).resolve().parent
-        bundle_dir = resources_dir
+def strict_path(value: Path | None) -> Path:
+    if value is None:
+        raise ValueError("Expected non-None value")
+    return value
 
-    log.debug(f"Resources Directory: {resources_dir}")
-    log.debug(f"Bundle Directory: {bundle_dir}")
 
-    # Where to WRITE user data (never write into the .app)
-    if resources_dir == bundle_dir:
-        log.debug("Using local directory for writable data")
-        writable_dir = bundle_dir
-    else:
-        try:
-            # macOS Application Support path
-            from PyQt6.QtCore import QStandardPaths
+class Global_Vars:
+    def __init__(self):
+        self.log = StructuredLogger("Globals", "TRACE", None, True, None, True, True)
+        self.res_dir, self.bundle_dir, self.write_dir = self.app_dirs()
+        self.tmp_dir: Path = Path()
+        self.cases_dir: Path = Path()
+        self.tex_src_dir: Path = Path()
+        self.tex_dst_dir: Path = Path()
+        self.master_src_tex: Path = Path()
+        self.master_src_sty: Path = Path()
+        self.master_dst_tex: Path = Path()
+        self.master_dst_sty: Path = Path()
+        self.sql_src_dir: Path = Path()
+        self.sql_dst_dir: Path = Path()
+        self.sql_src_file: Path = Path()
+        self.sql_dst_file: Path = Path()
+        self.sql_create: Path = Path()
+        self.backup_location: Path = Path()
+        results: dict[str, Path] | None = self.load_from_json()
+        if results:
+            self.log.info("Loaded global variables from JSON")
+            self.res_dir = results.get("res_dir", self.res_dir)
+            self.bundle_dir = results.get("bundle_dir", self.bundle_dir)
+            self.write_dir = results.get("write_dir", self.write_dir)
+            self.tmp_dir = results.get("tmp_dir", self.tmp_dir)
+            self.cases_dir = results.get("cases_dir", self.cases_dir)
+            self.tex_src_dir = results.get("tex_src_dir", self.tex_src_dir)
+            self.tex_dst_dir = results.get("tex_dst_dir", self.tex_dst_dir)
+            self.master_src_tex = results.get("master_src_tex", self.master_src_tex)
+            self.master_src_sty = results.get("master_src_sty", self.master_src_sty)
+            self.master_dst_tex = results.get("master_dst_tex", self.master_dst_tex)
+            self.master_dst_sty = results.get("master_dst_sty", self.master_dst_sty)
+            self.sql_src_dir = results.get("sql_src_dir", self.sql_src_dir)
+            self.sql_dst_dir = results.get("sql_dst_dir", self.sql_dst_dir)
+            self.sql_src_file = results.get("sql_src_file", self.sql_src_file)
+            self.sql_dst_file = results.get("sql_dst_file", self.sql_dst_file)
+            self.sql_create = results.get("sql_create", self.sql_create)
+            self.backup_location = results.get("backup_location", self.backup_location)
+        else:
+            self.log.warning("No global variables found in JSON")
+            self.tmp_dir = self.write_dir / "TMP"
+            self.cases_dir = self.write_dir / "Cases"
+            self.tex_src_dir = self.res_dir / "tex_src"
+            self.tex_dst_dir = self.write_dir / "tex_src"
+            self.master_src_tex = self.tex_src_dir / "CaseBriefs.tex"
+            self.master_src_sty = self.tex_src_dir / "lawbrief.sty"
+            self.master_dst_tex = self.tex_dst_dir / "CaseBriefs.tex"
+            self.master_dst_sty = self.tex_dst_dir / "lawbrief.sty"
+            self.sql_src_dir = self.res_dir / "SQL"
+            self.sql_dst_dir = self.write_dir / "SQL"
+            self.sql_src_file = self.sql_src_dir / "Cases.sqlite"
+            self.sql_dst_file = self.sql_dst_dir / "Cases.sqlite"
+            self.sql_create = self.sql_src_dir / "Create_DB.sql"
+            self.backup_location = self.write_dir / "Backup"
+        self.__setattr__ = self._setattr_
+        for d in (
+            self.write_dir,
+            self.tmp_dir,
+            self.cases_dir,
+            self.tex_src_dir,
+            self.tex_dst_dir,
+            self.sql_src_dir,
+            self.sql_dst_dir,
+            self.backup_location,
+        ):
+            Path(d).mkdir(parents=True, exist_ok=True)
 
-            base = (
-                Path(
-                    QStandardPaths.writableLocation(
-                        QStandardPaths.StandardLocation.AppDataLocation
+    def _setattr_(self, name: str, value: Any) -> None:
+        self.log.debug(f"Setting attribute '{name}' to '{value}'")
+        super().__setattr__(name, value)
+        self.save_to_json()
+
+    def app_dirs(self):
+        # Where to READ bundled resources (inside .app or onefile temp)
+        if getattr(sys, "frozen", False):
+            self.log.info("Running in a bundled environment")
+            resources_dir = Path(sys._MEIPASS)  # type: ignore # PyInstaller unpack dir
+            bundle_dir = (
+                Path(sys.executable).resolve().parents[2]
+            )  # .../CaseBriefs.app/Contents
+        else:
+            self.log.info("Running in a development environment")
+            resources_dir = Path(__file__).resolve().parent
+            bundle_dir = resources_dir
+
+        self.log.debug(f"Resources Directory: {resources_dir}")
+        self.log.debug(f"Bundle Directory: {bundle_dir}")
+
+        # Where to WRITE user data (never write into the .app)
+        if resources_dir == bundle_dir:
+            self.log.debug("Using local directory for writable data")
+            writable_dir = bundle_dir
+        else:
+            try:
+                # macOS Application Support path
+                from PyQt6.QtCore import QStandardPaths
+
+                base = (
+                    Path(
+                        QStandardPaths.writableLocation(
+                            QStandardPaths.StandardLocation.AppDataLocation
+                        )
                     )
+                    / APP_NAME
                 )
-                / APP_NAME
-            )
-            writable_dir = (
-                Path(base)
-                if base
-                else Path.home() / "Library" / "Application Support" / APP_NAME
-            )  # APP_NAME
-        except Exception:
-            writable_dir = (
-                Path.home() / "Library" / "Application Support" / APP_NAME
-            )  # APP_NAME
-        log.debug(f"Writable Directory: {writable_dir}")
-        writable_dir.mkdir(parents=True, exist_ok=True)
-    return resources_dir, bundle_dir, writable_dir
+                writable_dir = (
+                    Path(base)
+                    if base
+                    else Path.home() / "Library" / "Application Support" / APP_NAME
+                )  # APP_NAME
+            except Exception:
+                writable_dir = (
+                    Path.home() / "Library" / "Application Support" / APP_NAME
+                )  # APP_NAME
+            self.log.debug(f"Writable Directory: {writable_dir}")
+            writable_dir.mkdir(parents=True, exist_ok=True)
+        return resources_dir, bundle_dir, writable_dir
+
+    def load_from_json(self) -> dict[str, Path] | None:
+        json_path = self.write_dir / "global_vars.json"
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for key in list(data.keys()):
+                    if key.startswith("_") or key.startswith("log"):
+                        del data[key]
+                    if isinstance(data[key], MethodType):
+                        del data[key]
+                    if isinstance(data[key], str):
+                        data[key] = Path(data[key])
+                self.log.info(f"Loaded global variables from {json_path}")
+                return data
+        self.log.warning(f"JSON file not found: {json_path}")
+        return None
+
+    def save_to_json(self):
+        json_path = self.write_dir / "global_vars.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            own_dict = self.__dict__.copy()
+            for key in list(own_dict.keys()):
+                if key.startswith("_") or key.startswith("log"):
+                    del own_dict[key]
+                    continue
+                if isinstance(own_dict[key], MethodType):
+                    del own_dict[key]
+                    continue
+                if isinstance(own_dict[key], Path):
+                    own_dict[key] = str(own_dict[key])
+            json.dump(own_dict, f, indent=4)
+            self.log.info(f"Saved global variables to {json_path}")
 
 
-global RES_DIR, BUNDLE_DIR, WRITE_DIR, TMP_DIR, CASES_DIR, TEX_SRC_DIR, TEX_DST_DIR, MASTER_SRC_TEX, MASTER_SRC_STY, MASTER_DST_TEX, MASTER_DST_STY, SQL_SRC_DIR, SQL_DST_DIR, SQL_SRC_FILE, SQL_DST_FILE, SQL_CREATE
-RES_DIR, BUNDLE_DIR, WRITE_DIR = app_dirs()
+global global_vars
+global_vars = Global_Vars()
 
-# Example subfolders you were creating relatively before:
-TMP_DIR = WRITE_DIR / "TMP"
-CASES_DIR = WRITE_DIR / "Cases"
-TEX_SRC_DIR = RES_DIR / "tex_src"
-TEX_DST_DIR = WRITE_DIR / "tex_src"
-MASTER_SRC_TEX = TEX_SRC_DIR / "CaseBriefs.tex"
-MASTER_SRC_STY = TEX_SRC_DIR / "lawbrief.sty"
-MASTER_DST_TEX = TEX_DST_DIR / "CaseBriefs.tex"
-MASTER_DST_STY = TEX_DST_DIR / "lawbrief.sty"
-SQL_SRC_DIR = RES_DIR / "SQL"
-SQL_DST_DIR = WRITE_DIR / "SQL"
-SQL_SRC_FILE = SQL_SRC_DIR / "Cases.sqlite"
-SQL_DST_FILE = SQL_DST_DIR / "Cases.sqlite"
-SQL_CREATE = SQL_SRC_DIR / "Create_DB.sql"
-
-for d in (
-    WRITE_DIR,
-    TMP_DIR,
-    CASES_DIR,
-    TEX_SRC_DIR,
-    TEX_DST_DIR,
-    SQL_SRC_DIR,
-    SQL_DST_DIR,
-):
-    d.mkdir(parents=True, exist_ok=True)
 
 log = StructuredLogger(
-    "CaseBrief", "TRACE", str(WRITE_DIR / "CaseBriefs.log"), True, None, True, True
+    "CaseBrief",
+    "TRACE",
+    str(global_vars.write_dir / "CaseBriefs.log"),
+    True,
+    None,
+    True,
+    True,
 )
 
-log.debug(f"Base Directory: {WRITE_DIR}")
+log.debug(f"Base Directory: {global_vars.write_dir}")
 
 
 def tex_escape(input: str) -> str:
@@ -161,8 +254,10 @@ class SQL:
         log.debug("Ensuring database exists")
         if not self.exists():
             log.warning(f"Database not found, creating at {self.db_path}")
-            with sqlite3.connect(str(SQL_DST_FILE)) as conn:
-                with open(SQL_CREATE, "r", encoding="utf-8") as f:
+            with sqlite3.connect(str(global_vars.sql_dst_file)) as conn:
+                with open(
+                    strict_path(global_vars.sql_create), "r", encoding="utf-8"
+                ) as f:
                     conn.executescript(f.read())
             log.info("Database created successfully")
             return True
@@ -286,6 +381,81 @@ class SQL:
             self.connection.rollback()
             log.error(f"Error saving case brief to database: {e}", e.__traceback__)
 
+    def export_db_file(self, export_path: Path) -> None:
+        """Export the entire database to a SQL file."""
+        log.debug(f"Exporting database to {export_path}")
+        sql_dump = self._export_db_str()
+        with open(export_path, "w", encoding="utf-8") as f:
+            f.write(sql_dump)
+        log.info(f"Database exported successfully to {export_path}")
+
+    def _export_db_str(self) -> str:
+        def qident(name: str) -> str:
+            # Quote identifiers with double quotes, escape internal quotes
+            return '"' + name.replace('"', '""') + '"'
+
+        table_order_map = {
+            "Courses": 1,
+            "Subjects": 2,
+            "Opinions": 3,
+            "Cases": 4,
+            "CaseSubjects": 5,
+            "CaseOpinions": 6,
+        }
+
+        # All user tables, skip sqlite_* internals
+        tables = [
+            r[0]
+            for r in self.execute(
+                "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall()
+        ]
+        tables.sort(key=lambda t: table_order_map.get(t, 100))
+
+        parts: list[str] = [
+            "-- Exported SQLite data (data only)",
+            "PRAGMA foreign_keys=OFF;",
+            "BEGIN TRANSACTION;",
+        ]
+
+        for table in tables:
+            # Skip hidden/generated columns (hidden!=0)
+            cols = self.execute(f"PRAGMA table_xinfo({qident(table)})").fetchall()
+            colnames = [c[1] for c in cols if c[-1] == 0]  # hidden flag is last field
+
+            if not colnames:
+                continue
+
+            sel_cols = ", ".join(qident(c) for c in colnames)
+            qvals = lambda v: self.execute("SELECT quote(?)", (v,)).fetchone()[  # type: ignore
+                0
+            ]  # pyright: ignore[reportUnknownArgumentType]
+
+            for row in self.execute(
+                f"SELECT {sel_cols} FROM {qident(table)}"
+            ).fetchall():
+                values = ", ".join(qvals(row[i]) for i in range(len(colnames)))
+                parts.append(
+                    f"INSERT OR REPLACE INTO {qident(table)} ({sel_cols}) VALUES ({values});"
+                )
+
+        parts += ["COMMIT;", "PRAGMA foreign_keys=ON;"]
+        return "\n".join(parts)
+
+    def restore_db_file(self, backup_path: Path) -> None:
+        """Restore the database from a SQL dump file."""
+        log.debug(f"Restoring database from {backup_path}")
+        with open(backup_path, "r", encoding="utf-8") as f:
+            db_str = f.read()
+        self._restore_db_str(db_str)
+
+    def _restore_db_str(self, db_str: str) -> None:
+        """Restore the database from a SQL dump string."""
+        log.debug(f"Restoring database from SQL dump")
+        self.connection.executescript(db_str)
+        self.commit()
+        log.info(f"Database restored successfully")
+
     def loadBrief(self, case_label: str) -> "CaseBrief":
         """Load a case brief from the database by its label."""
         log.debug(f"Loading case brief from SQL with label {case_label}")
@@ -372,14 +542,39 @@ class SQL:
         subjects = [row[0] for row in self.cursor.fetchall()]
         return subjects
 
+    def addCourse(self, course: str) -> None:
+        """Add a course to the database."""
+        log.debug(f"Adding course '{course}' to SQL")
+        self.execute("INSERT INTO Courses (name) VALUES (?)", (course,))
+        self.commit()
+
+    def removeCourse(self, course: str) -> None:
+        """Remove a course from the database."""
+        log.debug(f"Removing course '{course}' from SQL")
+        usage_count = self.execute(
+            "SELECT COUNT(*) FROM Cases WHERE course = ?", (course,)
+        ).fetchone()[0]
+        if usage_count > 0:
+            log.warning(f"Course '{course}' is still in use by {usage_count} cases.")
+            return
+        self.execute("DELETE FROM Courses WHERE name = ?", (course,))
+        self.commit()
+
+    def fetchCourses(self) -> list[str]:
+        """Fetch all course names from the database."""
+        log.debug("Fetching course names from SQL")
+        self.execute("SELECT name FROM Courses")
+        courses = [row[0] for row in self.cursor.fetchall()]
+        return courses
+
 
 class Latex:
     """A class to handle LaTeX document generation."""
 
     def __init__(self):
-        self.engine_path: Path = WRITE_DIR / "bin" / "tinitex"
-        self.tex_dir: Path = CASES_DIR
-        self.render_dir: Path = CASES_DIR
+        self.engine_path: Path = global_vars.write_dir / "bin" / "tinitex"
+        self.tex_dir: Path = strict_path(global_vars.cases_dir)
+        self.render_dir: Path = strict_path(global_vars.cases_dir)
 
     def _brief2Latex(self, brief: "CaseBrief") -> str:
         """Convert a CaseBrief object to its LaTeX representation."""
@@ -815,7 +1010,7 @@ class CaseBrief:
 
     def get_pdf_path(self) -> str:
         """Get the path to the PDF file for this case brief."""
-        return str(CASES_DIR / f"{self.filename}.pdf")
+        return str(strict_path(global_vars.cases_dir) / f"{self.filename}.pdf")
 
     def to_latex(self) -> str:
         """Generate a LaTeX representation of the case brief."""
@@ -901,7 +1096,7 @@ class CaseBrief:
 
     def to_sql(self) -> None:
         log.debug(f"Saving case brief '{self.label.text}' to SQL database")
-        conn = sqlite3.connect(str(SQL_DST_FILE))
+        conn = sqlite3.connect(str(global_vars.sql_dst_file))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         try:
@@ -1011,14 +1206,14 @@ class CaseBrief:
 
     def compile_to_pdf(self) -> str | None:
         """Compile the LaTeX file to PDF."""
-        tex_file = CASES_DIR / f"{self.filename}.tex"
+        tex_file = strict_path(global_vars.cases_dir) / f"{self.filename}.tex"
         self.save_to_file(str(tex_file))
         pdf_file = self.get_pdf_path()
         if os.path.exists(pdf_file):
             os.remove(pdf_file)
         try:
             process: QProcess = QProcess()
-            process.start(str(RES_DIR / "bin" / "tinitex"), [str(tex_file)])
+            process.start(str(global_vars.res_dir / "bin" / "tinitex"), [str(tex_file)])
             # process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
             if (
@@ -1029,7 +1224,7 @@ class CaseBrief:
                 log.error(f"Error compiling {tex_file} to PDF: {error_output}")
                 return
             else:
-                clean_dir(str(CASES_DIR))
+                clean_dir(str(global_vars.cases_dir))
             log.info(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
@@ -1119,7 +1314,7 @@ class CaseBrief:
     def load_from_sql(case_label: str) -> "CaseBrief":
         """Load a case brief from the SQL database by its label."""
         log.debug(f"Loading case brief from SQL with label {case_label}")
-        conn = sqlite3.connect(str(SQL_DST_FILE))
+        conn = sqlite3.connect(str(global_vars.sql_dst_file))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
         curr.execute(
@@ -1172,13 +1367,13 @@ class CaseBriefs:
 
     def __init__(self):
         self.case_briefs: list[CaseBrief] = []
-        self.sql = SQL(db_path=str(SQL_DST_FILE))
+        self.sql = SQL(db_path=str(global_vars.sql_dst_file))
         self.latex = Latex()
 
     def reload_cases_tex(self) -> None:
         """Reload all case briefs from the ./Cases directory."""
         log.info("Reloading case briefs from TeX files...")
-        case_path = CASES_DIR
+        case_path = strict_path(global_vars.cases_dir)
         for filename in os.listdir(case_path):
             if filename.endswith(".tex"):
                 brief = self.latex.loadBrief(os.path.join(case_path, filename))

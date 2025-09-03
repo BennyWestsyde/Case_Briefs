@@ -24,10 +24,16 @@ The resulting Latex document will be assembled as such:
 """
 
 from logger import StructuredLogger
-from CaseBrief import WRITE_DIR
+from CaseBrief import global_vars
 
 log = StructuredLogger(
-    "Main", "TRACE", str(WRITE_DIR / "CaseBriefs.log"), True, None, True, True
+    "Main",
+    "TRACE",
+    str(global_vars.write_dir / "CaseBriefs.log"),
+    True,
+    None,
+    True,
+    True,
 )
 
 log.info("Starting Case Briefs Application")
