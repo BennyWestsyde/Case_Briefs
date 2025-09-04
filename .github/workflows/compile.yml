@@ -21,16 +21,9 @@ jobs:
             runner: macos-13   # Intel runner
           - arch: arm64
             runner: macos-14   # Apple Silicon runner
-          - arch: universal2
-            runner: macos-14   # Universal build on Apple Silicon runner
             # Windows
           - arch: amd64
             runner: windows-latest
-          - arch: x86
-            runner: windows-latest
-          - arch: all
-            runner: windows-latest
-
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -141,10 +134,8 @@ jobs:
               Macos:
                 - x86_64: CaseBriefs-x86_64.zip   (Apple Intel Macs)
                 - arm64:  CaseBriefs-arm64.zip    (Apple Silicon: M1/M2/etc)
-                - universal2: CaseBriefs-U.zip (Runs on both Intel & Apple Silicon)
               Windows:
                 - x86_64: CaseBriefs-x86_64.zip   (Windows 64-bit)
-                - xarm64:  CaseBriefs-arm64.zip    (Windows ARM 64-bit)
           draft: false
           prerelease: false
 
@@ -168,16 +159,6 @@ jobs:
           asset_name: CaseBriefs-macos-arm64.zip
           asset_content_type: application/zip
 
-      - name: Upload universal2 Mac asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/CaseBriefs-macos-universal2/CaseBriefs-macos-universal2.zip
-          asset_name: CaseBriefs-macos-universal2.zip
-          asset_content_type: application/zip
-
       - name: Upload x86_64 Windows asset
         uses: actions/upload-release-asset@v1
         env:
@@ -186,24 +167,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/CaseBriefs-windows-x86_64/CaseBriefs-windows-x86_64.zip
           asset_name: CaseBriefs-windows-x86_64.zip
-          asset_content_type: application/zip
-
-      - name: Upload x86 Windows asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/CaseBriefs-windows-x86/CaseBriefs-windows-x86.zip
-          asset_name: CaseBriefs-windows-x86.zip
-          asset_content_type: application/zip
-
-      - name: Upload all Windows asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/CaseBriefs-windows-all/CaseBriefs-windows-all.zip
-          asset_name: CaseBriefs-windows-all.zip
           asset_content_type: application/zip
