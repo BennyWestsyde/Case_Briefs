@@ -30,24 +30,13 @@ from CaseBrief import (
     Subject,
     Label,
     Opinion,
-    log,
     case_briefs,
-    subjects,
     SQL,
     global_vars,
 )
 
-from logger import StructuredLogger
+from logger import Logged
 
-log = StructuredLogger(
-    "GUI",
-    "TRACE",
-    str(global_vars.write_dir / "CaseBriefs.log"),
-    True,
-    None,
-    True,
-    True,
-)
 
 from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtGui import (
@@ -225,10 +214,13 @@ class SpellLineEdit(QLineEdit):
         self.spellchecker.word_frequency.add(word.lower())
 
 
-class CaseBriefCreator(QWidget):
+class CaseBriefCreator(Logged, QWidget):
     def __init__(self):
-        log.info("Opening Case Brief Creator")
-        super().__init__()
+        super().__init__(
+            class_name=self.__class__.__name__,
+            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+        )
+        self.log.info("Opening Case Brief Creator")
         case_briefs.reload_cases_sql()
 
         subjects: list[Subject] = [
@@ -414,11 +406,11 @@ class CaseBriefCreator(QWidget):
         if not subject:
             QMessageBox.warning(self, "Warning", "Subject cannot be empty.")
             return
-        log.debug(f"Adding subject: {subject}")
-        if subject not in subjects:
-            log.trace(f"Subject '{subject}' not in master subject list, adding it.")
-            # case_briefs.sql.addCaseSubject(subject, self.label_entry.text())
-            subjects.append(Subject(subject))
+        self.log.debug(f"Adding subject: {subject}")
+        # if subject not in case_briefs.subjects:
+        #    log.trace(f"Subject '{subject}' not in master subject list, adding it.")
+        # case_briefs.sql.addCaseSubject(subject, self.label_entry.text())
+        #    case_briefs.subjects.append(Subject(subject))
         if subject not in self.current_subjects_str_list:
             self.current_subjects_str_list.append(subject)
         self.current_subjects_str_list.sort()
@@ -429,7 +421,7 @@ class CaseBriefCreator(QWidget):
         if not subject:
             QMessageBox.warning(self, "Warning", "Subject cannot be empty.")
             return
-        log.debug(f"Removing subject: {subject}")
+        self.log.debug(f"Removing subject: {subject}")
         if subject in self.current_subjects_str_list:
             self.current_subjects_str_list.remove(subject)
         self.rerender_subjects_list()
@@ -523,23 +515,26 @@ class CaseBriefCreator(QWidget):
         QMessageBox.information(
             self, "Success", f"Case brief '{case_brief.title}' created successfully!"
         )
-        log.info(f"Case brief '{case_brief.title}' created successfully!")
+        self.log.info(f"Case brief '{case_brief.title}' created successfully!")
         self.close()
 
     def show(self):
         super().show()
-        log.info("Case brief creation window opened")
+        self.log.info("Case brief creation window opened")
 
 
-class CaseBriefManager(QWidget):
+class CaseBriefManager(Logged, QWidget):
     """A window for managing existing case briefs.
     This window should bring up a list of the existing case briefs,
     and allow the user to select one and search existing case briefs then edit them.
     """
 
     def __init__(self):
-        super().__init__()
-        log.info("Initializing Case Brief Manager")
+        super().__init__(
+            class_name=self.__class__.__name__,
+            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+        )
+        self.log.info("Initializing Case Brief Manager")
         case_briefs.reload_cases_sql()
 
         self.setWindowTitle("Case Brief Manager")
@@ -589,7 +584,7 @@ class CaseBriefManager(QWidget):
                 self._make_view_handler(case_brief)
             )  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
             case_brief_item.setToolTip(
-                f"Course: {case_brief.course}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subject)}\nLabel: {case_brief.label.text}"
+                f"Course: {case_brief.course}\nCitation: {case_brief.citation}\nSubjects: {', '.join(str(s) for s in case_brief.subjects)}\nLabel: {case_brief.label.text}"
             )
             content_layout.addWidget(case_brief_item, index + 1, 0)
             content_layout.addWidget(case_brief_edit_button, index + 1, 1)
@@ -620,7 +615,7 @@ class CaseBriefManager(QWidget):
 
     def view_case_brief(self, case_brief: CaseBrief):
         """View the PDF of a case brief."""
-        log.info(f"Viewing case brief '{case_brief.title}'")
+        self.log.info(f"Viewing case brief '{case_brief.title}'")
         pdf_path = case_brief.compile_to_pdf()
         if not pdf_path or not os.path.exists(pdf_path):
             QMessageBox.critical(
@@ -673,7 +668,7 @@ class CaseBriefManager(QWidget):
         self.creator.defendant_entry.textChanged.disconnect()  # pyright: ignore[reportUnknownMemberType]
         self.creator.citation_entry.setText(case_brief.citation)
         self.creator.class_selector.setCurrentText(case_brief.course)
-        self.creator.current_subjects_str_list = [s.name for s in case_brief.subject]
+        self.creator.current_subjects_str_list = [s.name for s in case_brief.subjects]
         self.creator.rerender_subjects_list()
         self.creator.facts_entry.setPlainText(case_brief.facts)
         self.creator.procedure_entry.setPlainText(case_brief.procedure)
@@ -712,7 +707,7 @@ class CaseBriefManager(QWidget):
         )
 
         self.creator.show()
-        log.info(f"Editing case brief '{case_brief.title}'")
+        self.log.info(f"Editing case brief '{case_brief.title}'")
 
     def update_case_brief(
         self,
@@ -749,7 +744,7 @@ class CaseBriefManager(QWidget):
         case_brief.update_defendant(defendant)
         case_brief.update_citation(citation)
         case_brief.course = self.creator.class_selector.currentText()
-        case_brief.subject = [Subject(s) for s in subjects]
+        case_brief.subjects = [Subject(s) for s in subjects]
         case_brief.update_facts(facts)
         case_brief.update_procedure(procedure)
         case_brief.update_issue(issue)
@@ -768,19 +763,22 @@ class CaseBriefManager(QWidget):
         QMessageBox.information(
             self, "Success", f"Case brief '{case_brief.title}' created successfully!"
         )
-        log.info(f"Case brief '{case_brief.title}' created successfully!")
+        self.log.info(f"Case brief '{case_brief.title}' created successfully!")
         self.creator.close()
         self.close()
 
     def show(self):
         super().show()
-        log.info("Case brief manager opened")
+        self.log.info("Case brief manager opened")
 
 
-class SettingsWindow(QWidget):
+class SettingsWindow(Logged, QWidget):
     def __init__(self):
-        super().__init__()
-        log.info("Initializing Settings Window")
+        super().__init__(
+            class_name=self.__class__.__name__,
+            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+        )
+        self.log.info("Initializing Settings Window")
         self.setWindowTitle("Settings")
         self.setGeometry(150, 150, 400, 300)
         self.tabs = QTabWidget()
@@ -853,14 +851,14 @@ class SettingsWindow(QWidget):
         self.setWindowTitle("Case Briefs Settings")
 
     def execute_backup_restore(self):
-        log.debug("Executing backup/restore")
+        self.log.debug("Executing backup/restore")
         if self.backup_restore_toggle.text() == "Backup":
             self.backup_cases()
         elif self.backup_restore_toggle.text() == "Restore":
             self.restore_cases()
 
     def toggle_backup_restore(self):
-        log.debug("Toggling backup/restore")
+        self.log.debug("Toggling backup/restore")
         if self.backup_restore_toggle.text() == "Backup":
             self.backup_restore_toggle.setText("Restore")
             self.backup_restore_toggle.setStyleSheet(
@@ -877,7 +875,7 @@ class SettingsWindow(QWidget):
             self.backup_location_button.clicked.connect(self.select_backup_location)
 
     def select_backup_location(self):
-        log.debug("Selecting backup location")
+        self.log.debug("Selecting backup location")
         self.backup_location_selector.setFileMode(QFileDialog.FileMode.Directory)
         self.backup_location_selector.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
 
@@ -891,12 +889,12 @@ class SettingsWindow(QWidget):
             self.backup_location.setText(f"{selected_dir}")
             global global_vars
             global_vars.backup_location = Path(selected_dir)
-            log.debug(f"Set backup location to {selected_dir}")
+            self.log.debug(f"Set backup location to {selected_dir}")
         else:
             self.backup_location.setText(f"{current_path}")
 
     def select_restore_location(self):
-        log.debug("Selecting restore location")
+        self.log.debug("Selecting restore location")
         self.backup_location_selector.setFileMode(QFileDialog.FileMode.ExistingFile)
         self.backup_location_selector.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
         self.backup_location_selector.setNameFilter("SQL Files (*.sql)")
@@ -911,36 +909,36 @@ class SettingsWindow(QWidget):
             self.backup_location.setText(f"{selected_dir}")
             global global_vars
             global_vars.tmp_dir = Path(selected_dir)
-            log.debug(f"Set restore location to {selected_dir}")
+            self.log.debug(f"Set restore location to {selected_dir}")
         else:
             self.backup_location.setText(f"{current_path}")
 
     def backup_cases(self):
-        log.debug("Backing up cases")
+        self.log.debug("Backing up cases")
         curr_dt = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         backup_path = (
             Path(self.backup_location.text()) / f"CaseBriefBackup_{curr_dt}.sql"
         )
         case_briefs.sql.export_db_file(backup_path)
-        log.info(f"Cases backed up to {backup_path}")
+        self.log.info(f"Cases backed up to {backup_path}")
         # Popup a confirmation
         QMessageBox.information(
             self, "Backup Complete", f"{len(case_briefs.case_briefs)} cases backed up."
         )
 
     def restore_cases(self):
-        log.debug("Restoring cases")
+        self.log.debug("Restoring cases")
         backup_path = Path(self.backup_location.text())
         case_briefs.sql.restore_db_file(backup_path)
         case_briefs.reload_cases_sql()
-        log.info(f"Cases restored from {backup_path}")
+        self.log.info(f"Cases restored from {backup_path}")
         # Popup a confirmation
         QMessageBox.information(
             self, "Restore Complete", f"{len(case_briefs.case_briefs)} cases restored."
         )
 
     def select_case_render_path(self):
-        log.debug("Selecting case render path")
+        self.log.debug("Selecting case render path")
         current_path = Path(self.case_render_path.text())
         selected_dir = Path(
             self.case_render_path_selector.getExistingDirectory(
@@ -951,7 +949,7 @@ class SettingsWindow(QWidget):
             self.case_render_path.setText(f"{selected_dir}")
             global global_vars
             global_vars.cases_output_dir = Path(selected_dir)
-            log.debug(f"Set case render path to {selected_dir}")
+            self.log.debug(f"Set case render path to {selected_dir}")
         else:
             self.case_render_path.setText(f"{current_path}")
 
@@ -969,7 +967,7 @@ class SettingsWindow(QWidget):
 
     def show(self):
         super().show()
-        log.info("Settings window opened")
+        self.log.info("Settings window opened")
 
 
 from typing import Callable, Optional
@@ -985,13 +983,16 @@ from PyQt6.QtWidgets import (
 )
 
 
-class Initializer:
+class Initializer(Logged):
     def __init__(
         self,
         console: QTextEdit,
         on_progress: Optional[Callable[[int, int, str], None]] = None,
     ) -> None:
-        log.info("Initializing Initializer")
+        super().__init__(
+            class_name=self.__class__.__name__,
+            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+        )
         self.complete: bool = False
         self.console: QTextEdit = console
         self._on_progress = on_progress
@@ -1021,7 +1022,7 @@ class Initializer:
         for func, arg in self._todo:
             func(arg)
 
-        log.info("Completing initialization")
+        self.log.info("Completing initialization")
         self.console.append("Completing initialization\n")
         self.complete = True
         self._emit_progress("Initialization complete")
@@ -1034,93 +1035,99 @@ class Initializer:
 
     def ensure_dir(self, path: tuple[Path]) -> None:
         path_str = path[0]
-        log.debug(f"Ensuring directory exists: {path_str.absolute()}")
-        self.console.append(f"Ensuring directory exists: {path_str.absolute()}\n")
+        relative_print_path = path_str.relative_to(global_vars.write_dir)
+        self.log.debug(f"Ensuring directory exists: {relative_print_path}")
+        self.console.append(f"Ensuring directory exists: {relative_print_path}\n")
         if not path_str.exists():
-            log.debug(f"Directory does not exist, creating: {path_str.absolute()}")
+            self.log.debug(f"Directory does not exist, creating: {relative_print_path}")
             self.console.append(
-                f"Directory does not exist, creating: {path_str.absolute()}\n"
+                f"Directory does not exist, creating: {relative_print_path}\n"
             )
             path_str.mkdir(parents=True, exist_ok=True)
-            log.info(f"Created directory: {path_str.absolute()}")
-            self.console.append(f"Created directory: {path_str.absolute()}\n")
+            self.log.info(f"Created directory: {relative_print_path}")
+            self.console.append(f"Created directory: {relative_print_path}\n")
         else:
-            log.info(f"Directory already exists: {path_str.absolute()}")
-            self.console.append(f"Directory already exists: {path_str.absolute()}\n")
-        self._emit_progress(f"Ensured directory {path_str}")
+            self.log.info(f"Directory already exists: {relative_print_path}")
+            self.console.append(f"Directory already exists: {relative_print_path}\n")
+        self._emit_progress(f"Ensured directory {relative_print_path}")
 
     def ensure_file(self, file: tuple[Path]) -> None:
         file_path = file[0]
-        log.debug(f"Ensuring file exists: {file_path.absolute()}")
-        self.console.append(f"Ensuring file exists: {file_path.absolute()}\n")
+        relative_print_path = file_path.relative_to(global_vars.write_dir)
+        self.log.debug(f"Ensuring file exists: {relative_print_path}")
+        self.console.append(f"Ensuring file exists: {relative_print_path}\n")
         if not file_path.exists():
-            log.debug(f"File does not exist, creating: {file_path.absolute()}")
+            self.log.debug(f"File does not exist, creating: {relative_print_path}")
             self.console.append(
-                f"File does not exist, creating: {file_path.absolute()}\n"
+                f"File does not exist, creating: {relative_print_path}\n"
             )
             file_path.touch(exist_ok=True)
-            log.info(f"Created file: {file_path.absolute()}")
-            self.console.append(f"Created file: {file_path.absolute()}\n")
+            self.log.info(f"Created file: {relative_print_path}")
+            self.console.append(f"Created file: {relative_print_path}\n")
         else:
-            log.info(f"File already exists: {file_path.absolute()}")
-            self.console.append(f"File already exists: {file_path.absolute()}\n")
-        self._emit_progress(f"Ensured file {file_path.absolute()}")
+            self.log.info(f"File already exists: {relative_print_path}")
+            self.console.append(f"File already exists: {relative_print_path}\n")
+        self._emit_progress(f"Ensured file {relative_print_path}")
 
     def ensure_db(self, db: tuple[Path]) -> None:
         db_path = db[0]
-        log.debug(f"Ensuring database exists: {db_path.absolute()}")
-        self.console.append(f"Ensuring database exists: {db_path.absolute()}\n")
+        relative_print_path = db_path.relative_to(global_vars.write_dir)
+        self.log.debug(f"Ensuring database exists: {relative_print_path}")
+        self.console.append(f"Ensuring database exists: {relative_print_path}\n")
         sql: SQL = SQL(str(db_path))
         if not sql.exists():
-            log.debug(
-                f"Database does not exist, creating: {Path(sql.db_path).absolute()}"
-            )
+            self.log.debug(f"Database does not exist, creating: {relative_print_path}")
             self.console.append(
-                f"Database does not exist, creating: {Path(sql.db_path).absolute()}\n"
+                f"Database does not exist, creating: {relative_print_path}\n"
             )
             if sql.ensureDB():
-                log.info(f"Created database: {Path(sql.db_path).absolute()}")
-                self.console.append(
-                    f"Created database: {Path(sql.db_path).absolute()}\n"
-                )
+                self.log.info(f"Created database: {relative_print_path}")
+                self.console.append(f"Created database: {relative_print_path}\n")
             else:
-                log.error(f"Failed to create database: {Path(sql.db_path).absolute()}")
+                self.log.error(f"Failed to create database: {relative_print_path}")
                 self.console.append(
-                    f"Failed to create database: {Path(sql.db_path).absolute()}\n"
+                    f"Failed to create database: {relative_print_path}\n"
                 )
         else:
-            log.info(f"Database already exists: {Path(sql.db_path).absolute()}")
-            self.console.append(
-                f"Database already exists: {Path(sql.db_path).absolute()}\n"
-            )
+            self.log.info(f"Database already exists: {relative_print_path}")
+            self.console.append(f"Database already exists: {relative_print_path}\n")
         sql.close()
         del sql
-        self._emit_progress(f"Ensured database {db_path.absolute()}")
+        self._emit_progress(f"Ensured database {relative_print_path}")
 
     def ensure_move(self, src_dst: tuple[Path, Path]) -> None:
         src = src_dst[0]
         dest = src_dst[1]
-        log.debug(f"Ensuring file move from {src.absolute()} to {dest.absolute()}")
+        relative_src_path = src.relative_to(global_vars.write_dir)
+        relative_dest_path = dest.relative_to(global_vars.write_dir)
+        self.log.debug(
+            f"Ensuring file move from {relative_src_path} to {relative_dest_path}"
+        )
         self.console.append(
-            f"Ensuring file move from {src.absolute()} to {dest.absolute()}\n"
+            f"Ensuring file move from {relative_src_path} to {relative_dest_path}\n"
         )
         if src.exists():
-            log.debug(f"Source file exists, moving: {src.absolute()}")
-            self.console.append(f"Source file exists, moving: {src.absolute()}\n")
+            self.log.debug(f"Source file exists, moving: {relative_src_path}")
+            self.console.append(f"Source file exists, moving: {relative_src_path}\n")
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(src.read_text())
-            log.info(f"Moved file to: {dest.absolute()}")
-            self.console.append(f"Moved file to: {dest.absolute()}\n")
+            self.log.info(f"Moved file to: {relative_dest_path}")
+            self.console.append(f"Moved file to: {relative_dest_path}\n")
         else:
-            log.warning(f"Source file does not exist: {src.absolute()}")
-            self.console.append(f"Source file does not exist: {src.absolute()}\n")
-        self._emit_progress(f"Ensured file move {src.absolute()} to {dest.absolute()}")
+            self.log.warning(f"Source file does not exist: {relative_src_path}")
+            self.console.append(f"Source file does not exist: {relative_src_path}\n")
+        self._emit_progress(
+            f"Ensured file move {relative_src_path} to {relative_dest_path}"
+        )
 
 
-class CaseBriefInit(QMainWindow):
+class CaseBriefInit(Logged, QMainWindow):
     def __init__(self) -> None:
-        super().__init__()
-        log.info("Initializing Case Briefs Initialization Window")
+        super().__init__(
+            class_name=self.__class__.__name__,
+            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+        )
+        self.log.info("Initializing Case Briefs Initialization Window")
         self.setWindowTitle("Case Briefs Initialization")
         self.setGeometry(100, 100, 600, 400)
 
@@ -1159,12 +1166,15 @@ class CaseBriefInit(QMainWindow):
         )
 
 
-class CaseBriefApp(QMainWindow):
+class CaseBriefApp(Logged, QMainWindow):
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            class_name=self.__class__.__name__,
+            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+        )
         self.setWindowTitle("Case Briefs Manager")
         self.setGeometry(100, 100, 600, 400)
-        log.info("Initializing Case Briefs Application")
+        self.log.info("Initializing Case Briefs Application")
 
         layout = QGridLayout()
         new_case_brief_button = QPushButton("Create Case Brief")
@@ -1198,28 +1208,28 @@ class CaseBriefApp(QMainWindow):
 
     def create_case_brief(self):
         # Logic to create a new case brief
-        log.info("Creating a new case brief...")
+        self.log.info("Creating a new case brief...")
         self.creator = CaseBriefCreator()
         self.creator.show()
 
     def view_case_briefs(self):
         # Logic to view existing case briefs
-        log.info("Viewing existing case briefs...")
+        self.log.info("Viewing existing case briefs...")
         self.manager = CaseBriefManager()
         self.manager.show()
 
     def render_pdf(self):
         # Logic to render the case brief as a PDF
-        log.info("Rendering PDF for the case brief...")
+        self.log.info("Rendering PDF for the case brief...")
         try:
             process = QProcess(self)
             process.setWorkingDirectory(str(global_vars.write_dir))
             output_path = "../TMP"
-            log.debug(f"Relative output path for LaTeX: {output_path}")
+            self.log.debug(f"Relative output path for LaTeX: {output_path}")
             program = global_vars.tinitex_binary
             program_exists = program.exists()
             if not program_exists:
-                log.error(f"Program not found: {program}")
+                self.log.error(f"Program not found: {program}")
                 QMessageBox.critical(self, "Error", f"Program not found: {program}")
                 return
             args = [
@@ -1230,7 +1240,7 @@ class CaseBriefApp(QMainWindow):
             ]
             process.setProgram(str(program))
             process.setArguments(args)
-            log.debug(f"Running command: {program} {' '.join(args)}")
+            self.log.debug(f"Running command: {program} {' '.join(args)}")
             process.start()
             process.waitForFinished()
             if (
@@ -1238,11 +1248,11 @@ class CaseBriefApp(QMainWindow):
                 or process.exitCode() != 0
             ):
                 error_output = process.readAllStandardError().data().decode()
-                log.error(f"LaTeX compilation failed: {error_output}")
+                self.log.error(f"LaTeX compilation failed: {error_output}")
                 QMessageBox.critical(self, "LaTeX Error", error_output)
                 return
             else:
-                log.info("LaTeX compilation succeeded.")
+                self.log.info("LaTeX compilation succeeded.")
                 clean_dir(str(global_vars.tmp_dir))
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -1252,7 +1262,7 @@ class CaseBriefApp(QMainWindow):
             "PDF Rendered",
             f"PDF for {global_vars.master_dst_tex.stem} has been generated successfully.",
         )
-        log.info(f"Moving PDF to Downloads folder")
+        self.log.info(f"Moving PDF to Downloads folder")
         shutil.move(
             global_vars.tmp_dir / f"{global_vars.master_dst_tex.stem}.pdf",
             os.path.join(
@@ -1263,6 +1273,6 @@ class CaseBriefApp(QMainWindow):
 
     def open_settings(self):
         # Logic to open the settings window
-        log.info("Opening settings...")
+        self.log.info("Opening settings...")
         self.settings = SettingsWindow()
         self.settings.show()

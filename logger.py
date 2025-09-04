@@ -27,6 +27,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Union, Final
+
 global log
 
 __all__ = [
@@ -41,7 +42,9 @@ TRACE_LEVEL_NUM: Final[int] = 5
 logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
 
 
-def _logger_trace(self: logging.Logger, msg: str, *args: object, **kwargs: object) -> None:
+def _logger_trace(
+    self: logging.Logger, msg: str, *args: object, **kwargs: object
+) -> None:
     """
     Add a `.trace()` method to `logging.Logger`.
 
@@ -85,7 +88,9 @@ def _iso_utc(ts: float) -> str:
     str
         ISO-8601 formatted timestamp in UTC, e.g. '2025-08-28T14:03:12Z'.
     """
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    )
 
 
 def _ensure_dir_for(file_path: str) -> None:
@@ -455,6 +460,21 @@ class StructuredLogger:
             except Exception:
                 # Swallow to avoid interfering with caller environments.
                 pass
+
+
+class Logged:
+    def __init__(self, class_name: str, output_path: str, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.log = StructuredLogger(
+            class_name,
+            "TRACE",
+            output_path,
+            True,
+            None,
+            True,
+            True,
+        )
+        self.log.info(f"Initialized logger for {class_name}")
 
 
 # ----- Minimal demo -----

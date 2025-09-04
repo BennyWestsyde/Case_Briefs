@@ -4,12 +4,12 @@ import sys
 from types import MethodType
 from typing import Any, List, TypedDict, Union
 import os
-from cleanup import clean_dir
+from cleanup import StructuredLogger, clean_dir
 import re
 import sqlite3
 from PyQt6.QtCore import QProcess
 
-from logger import StructuredLogger
+from logger import Logged
 from pathlib import Path
 
 global APP_NAME
@@ -23,8 +23,109 @@ def strict_path(value: Path | None) -> Path:
 
 
 class Global_Vars:
+    """
+    Holds and persists application-wide paths and configuration.
+
+    This class centralizes discovery, creation, and persistence of all filesystem
+    locations used by the Case Briefs application. On initialization it determines
+    resource and bundle locations, chooses an appropriate writable directory, and
+    either loads previously saved values from a JSON file or initializes sensible
+    defaults. It also ensures required directories exist and configures a platform-
+    specific path to the `tinitex` binary.
+
+    Persistence model:
+    - After initialization, any attribute assignment on an instance automatically
+        triggers a save to JSON (the class replaces `__setattr__` with an internal
+        wrapper). This makes changes durable across runs without extra calls.
+
+    Environment awareness:
+    - Development vs. bundled (PyInstaller/frozen) runs are detected.
+    - The writable data directory is resolved using Qt's QStandardPaths when
+        available, with a macOS-friendly fallback under
+        ~/Library/Application Support/<APP_NAME>.
+    - The `tinitex` binary path is chosen per-platform (.exe on Windows).
+
+    Attributes:
+    - self.log: StructuredLogger
+            Structured self.logger used for debug/info/warn messages.
+    - res_dir: pathlib.Path
+            Directory containing read-only application resources (e.g., templates, SQL).
+    - bundle_dir: pathlib.Path
+            Top-level bundle directory (e.g., .../CaseBriefs.app/Contents) or project
+            root during development.
+    - write_dir: pathlib.Path
+            Root of writable user data; also contains the persistence file.
+    - tmp_dir: pathlib.Path
+            Temporary working directory under write_dir (default: write_dir/TMP).
+    - cases_dir: pathlib.Path
+            Root directory for case input files (default: write_dir/Cases).
+    - cases_output_dir: pathlib.Path
+            Output directory for processed case artifacts (default: write_dir/Cases/Output).
+    - tex_src_dir: pathlib.Path
+            Read-only LaTeX source directory bundled with the app (default: res_dir/tex_src).
+    - tex_dst_dir: pathlib.Path
+            Writable LaTeX working directory (default: write_dir/tex_src).
+    - master_src_tex: pathlib.Path
+            Path to the master LaTeX source file in tex_src_dir (CaseBriefs.tex).
+    - master_src_sty: pathlib.Path
+            Path to the style file in tex_src_dir (lawbrief.sty).
+    - master_dst_tex: pathlib.Path
+            Writable copy of the master LaTeX file in tex_dst_dir.
+    - master_dst_sty: pathlib.Path
+            Writable copy of the style file in tex_dst_dir.
+    - sql_src_dir: pathlib.Path
+            Read-only SQL resource directory (default: res_dir/SQL).
+    - sql_dst_dir: pathlib.Path
+            Writable SQL directory (default: write_dir/SQL).
+    - sql_src_file: pathlib.Path
+            Bundled SQLite database (default: sql_src_dir/Cases.sqlite).
+    - sql_dst_file: pathlib.Path
+            Writable SQLite database (default: sql_dst_dir/Cases.sqlite).
+    - sql_create: pathlib.Path
+            SQL schema creation script (default: sql_src_dir/Create_DB.sql).
+    - backup_location: pathlib.Path
+            Directory for backups (default: write_dir/Backup).
+    - tinitex_binary: pathlib.Path
+            Path to the tinitex executable under res_dir/bin, with .exe on Windows.
+
+    Methods:
+    - app_dirs() -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]
+            Resolve (resources_dir, bundle_dir, writable_dir). Creates the writable
+            directory if needed and self.logs its decisions.
+    - load_from_json() -> dict[str, pathlib.Path] | None
+            Load previously saved attributes from write_dir/global_vars.json. Returns a
+            mapping of attribute names to Path values, or None if not found. Internal
+            and callable attributes are ignored.
+    - save_to_json() -> None
+            Persist current public attributes to write_dir/global_vars.json. Paths are
+            serialized as strings. May raise I/O errors if the file cannot be written.
+    - _setattr_(name: str, value: Any) -> None
+            Replacement for __setattr__ that self.logs the change, sets the attribute, and
+            immediately saves the updated state to JSON.
+
+    Side effects:
+    - Creates required directories (write_dir, tmp_dir, cases_dir, cases_output_dir,
+        tex_src_dir, tex_dst_dir, sql_src_dir, sql_dst_dir, backup_location).
+    - Reads/writes write_dir/global_vars.json during load/save.
+    - Emits self.log messages describing decisions and file operations.
+
+    Raises:
+    - OSError / IOError from directory creation or JSON file writes/reads.
+    - Any exceptions from Qt path resolution are caught; a platform fallback is used.
+
+    Example:
+            gv = Global_Vars()
+            # Use resolved paths
+            print(gv.sql_dst_file)
+            # Any change is persisted automatically
+            gv.backup_location = gv.write_dir / "MyBackups"
+    """
+
     def __init__(self):
-        self.log = StructuredLogger("Globals", "TRACE", None, True, None, True, True)
+        self.log = StructuredLogger(
+            "Globals_Vars", "TRACE", None, True, None, True, True
+        )
+        self.log.info(f"Initialized logger for {self.__class__.__name__}")
         self.res_dir, self.bundle_dir, self.write_dir = self.app_dirs()
         self.tmp_dir: Path = Path()
         self.cases_dir: Path = Path()
@@ -65,6 +166,7 @@ class Global_Vars:
             self.sql_dst_file = results.get("sql_dst_file", self.sql_dst_file)
             self.sql_create = results.get("sql_create", self.sql_create)
             self.backup_location = results.get("backup_location", self.backup_location)
+            self.save_to_json()
         else:
             self.log.warning("No global variables found in JSON")
             self.tmp_dir = self.write_dir / "TMP"
@@ -153,12 +255,14 @@ class Global_Vars:
         return resources_dir, bundle_dir, writable_dir
 
     def load_from_json(self) -> dict[str, Path] | None:
+        self.log.debug("Loading global variables from JSON")
         json_path = self.write_dir / "global_vars.json"
         if json_path.exists():
+            self.log.trace("Found JSON file")
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 for key in list(data.keys()):
-                    if key.startswith("_") or key.startswith("log"):
+                    if key.startswith("_") or key.startswith("self.log"):
                         del data[key]
                     if isinstance(data[key], MethodType):
                         del data[key]
@@ -166,10 +270,12 @@ class Global_Vars:
                         data[key] = Path(data[key])
                 self.log.info(f"Loaded global variables from {json_path}")
                 return data
-        self.log.warning(f"JSON file not found: {json_path}")
-        return None
+        else:
+            self.log.warning(f"JSON file not found: {json_path}")
+            return None
 
     def save_to_json(self):
+        self.log.debug("Saving global variables to JSON")
         json_path = self.write_dir / "global_vars.json"
         with open(json_path, "w", encoding="utf-8") as f:
             own_dict = self.__dict__.copy()
@@ -183,7 +289,7 @@ class Global_Vars:
                 if isinstance(own_dict[key], Path):
                     own_dict[key] = str(own_dict[key])
             json.dump(own_dict, f, indent=4)
-            self.log.info(f"Saved global variables to {json_path}")
+            self.log.debug(f"Saved global variables to {json_path}")
 
 
 global global_vars
@@ -193,7 +299,7 @@ global_vars = Global_Vars()
 log = StructuredLogger(
     "CaseBrief",
     "TRACE",
-    str(global_vars.write_dir / "CaseBriefs.log"),
+    str(global_vars.write_dir / "CaseBriefs.self.log"),
     True,
     None,
     True,
@@ -248,10 +354,13 @@ def tex_unescape(input: str) -> str:
 SQLiteValue = Union[str, int, float, bytes, None]
 
 
-class SQL:
+class SQL(Logged):
     """A class to handle interaction with the database."""
 
     def __init__(self, db_path: str = str(global_vars.sql_dst_file)):
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
         self.db_path = db_path
         self.ensureDB()
         self.connection = sqlite3.connect(self.db_path)
@@ -260,23 +369,23 @@ class SQL:
 
     def exists(self) -> bool:
         """Check if the database exists."""
-        log.debug("Checking if database exists")
+        self.log.trace("Checking if database exists")
         return Path(self.db_path).exists()
 
     def ensureDB(self) -> bool:
         """Ensure the database and tables exist."""
-        log.debug("Ensuring database exists")
+        self.log.debug("Ensuring database exists")
         if not self.exists():
-            log.warning(f"Database not found, creating at {self.db_path}")
+            self.log.warning(f"Database not found, creating at {self.db_path}")
             with sqlite3.connect(str(self.db_path)) as conn:
                 with open(
                     strict_path(global_vars.sql_create), "r", encoding="utf-8"
                 ) as f:
                     conn.executescript(f.read())
-            log.info("Database created successfully")
+            self.log.debug("Database created successfully")
             return True
         else:
-            log.info("Database found")
+            self.log.debug("Database found")
             return True
 
     def execute(
@@ -296,7 +405,7 @@ class SQL:
 
     def saveBrief(self, brief: "CaseBrief") -> None:
         """Save a case brief to the database."""
-        log.debug(f"Saving brief for case: {brief.citation}")
+        self.log.debug(f"Saving brief for case: {brief.citation}")
         cases_table_query = """
                 INSERT INTO Cases (label, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -334,7 +443,7 @@ class SQL:
             )
 
             # Clear existing subjects and opinions
-            log.trace("Deleting existing subjects and opinions")
+            self.log.trace("Deleting existing subjects and opinions")
             self.execute(
                 "DELETE FROM CaseSubjects WHERE case_label = ?", (brief.label.text,)
             )
@@ -343,8 +452,8 @@ class SQL:
             )
 
             # Insert subjects
-            for subject in brief.subject:
-                log.trace(f"Saving Subject: {subject.name}")
+            for subject in brief.subjects:
+                self.log.trace(f"Saving Subject: {subject.name}")
                 self.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
                 subject_id = self.cursor.fetchone()
                 if not subject_id:
@@ -366,7 +475,7 @@ class SQL:
 
             # Insert opinions
             for opinion in brief.opinions:
-                log.trace(f"Saving Opinion By: {opinion.author}")
+                self.log.trace(f"Saving Opinion By: {opinion.author}")
                 self.execute(
                     "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
                 )
@@ -393,15 +502,15 @@ class SQL:
             self.commit()
         except sqlite3.Error as e:
             self.connection.rollback()
-            log.error(f"Error saving case brief to database: {e}", e.__traceback__)
+            self.log.error(f"Error saving case brief to database: {e}", e.__traceback__)
 
     def export_db_file(self, export_path: Path) -> None:
         """Export the entire database to a SQL file."""
-        log.debug(f"Exporting database to {export_path}")
+        self.log.debug(f"Exporting database to {export_path}")
         sql_dump = self._export_db_str()
         with open(export_path, "w", encoding="utf-8") as f:
             f.write(sql_dump)
-        log.info(f"Database exported successfully to {export_path}")
+        self.log.info(f"Database exported successfully to {export_path}")
 
     def _export_db_str(self) -> str:
         def qident(name: str) -> str:
@@ -458,33 +567,35 @@ class SQL:
 
     def restore_db_file(self, backup_path: Path) -> None:
         """Restore the database from a SQL dump file."""
-        log.debug(f"Restoring database from {backup_path}")
+        self.log.debug(f"Restoring database from {backup_path}")
         with open(backup_path, "r", encoding="utf-8") as f:
             db_str = f.read()
         self._restore_db_str(db_str)
 
     def _restore_db_str(self, db_str: str) -> None:
         """Restore the database from a SQL dump string."""
-        log.debug(f"Restoring database from SQL dump")
+        self.log.debug(f"Restoring database from SQL dump")
         self.connection.executescript(db_str)
         self.commit()
-        log.info(f"Database restored successfully")
+        self.log.info(f"Database restored successfully")
 
     def loadBrief(self, case_label: str) -> "CaseBrief":
         """Load a case brief from the database by its label."""
-        log.debug(f"Loading case brief from SQL with label {case_label}")
+        self.log.debug(f"Loading case brief from SQL with label {case_label}")
         self.execute(
             "SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?",
             (case_label,),
         )
         cur_case = self.cursor.fetchone()
         if not cur_case:
-            log.error(f"No case brief found with label '{case_label}' in the database.")
+            self.log.error(
+                f"No case brief found with label '{case_label}' in the database."
+            )
             raise RuntimeError(
                 f"No case brief found with label '{case_label}' in the database."
             )
         else:
-            log.trace(f"Found case brief: {cur_case[-2]}")
+            self.log.trace(f"Found case brief: {cur_case[-2]}")
         self.execute(
             "SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?",
             (case_label,),
@@ -516,29 +627,31 @@ class SQL:
 
     def cite_case_brief(self, label: str) -> str:
         """Generate a citation for a case brief."""
-        log.debug(f"Citing case brief with label {label}")
+        self.log.debug(f"Citing case brief with label {label}")
         self.execute("SELECT title FROM Cases WHERE label = ?", (label,))
         title = self.cursor.fetchone()
         if not title:
-            log.error(f"No case brief found with label '{label}' for citation.")
+            self.log.error(f"No case brief found with label '{label}' for citation.")
             return f"CITE({label})"
         return f"\\hyperref[case:{label}]{{\\textit{{{title[0]}}}}}"
 
     def fetchCaseLabels(self) -> list[str]:
         """Fetch all case labels from the database."""
-        log.debug("Fetching case labels from SQL")
+        self.log.debug("Fetching case labels from SQL")
         self.execute("SELECT label FROM Cases")
         labels = [row[0] for row in self.cursor.fetchall()]
         return labels
 
     def addCaseSubject(self, subject: str, label: str) -> None:
         """Add a subject to a case label."""
-        log.debug(f"Adding subject '{subject}' to case label {label}")
+        self.log.debug(f"Adding subject '{subject}' to case label {label}")
         # Check if subject exists in Subjects table
         self.execute("SELECT id FROM Subjects WHERE name = ?", (subject,))
         subject_id = self.cursor.fetchone()
         if not subject_id:
-            log.info(f"Subject '{subject}' not found in Subjects table. Adding it.")
+            self.log.info(
+                f"Subject '{subject}' not found in Subjects table. Adding it."
+            )
             self.execute("INSERT INTO Subjects (name) VALUES (?)", (subject,))
             self.commit()
             self.execute("SELECT id FROM Subjects WHERE name = ?", (subject,))
@@ -551,41 +664,46 @@ class SQL:
 
     def fetchCaseSubjects(self) -> list[str]:
         """Fetch all case subjects from the database."""
-        log.debug("Fetching case subjects from SQL")
+        self.log.debug("Fetching case subjects from SQL")
         self.execute("SELECT name FROM Subjects")
         subjects = [row[0] for row in self.cursor.fetchall()]
         return subjects
 
     def addCourse(self, course: str) -> None:
         """Add a course to the database."""
-        log.debug(f"Adding course '{course}' to SQL")
+        self.log.debug(f"Adding course '{course}' to SQL")
         self.execute("INSERT INTO Courses (name) VALUES (?)", (course,))
         self.commit()
 
     def removeCourse(self, course: str) -> None:
         """Remove a course from the database."""
-        log.debug(f"Removing course '{course}' from SQL")
+        self.log.debug(f"Removing course '{course}' from SQL")
         usage_count = self.execute(
             "SELECT COUNT(*) FROM Cases WHERE course = ?", (course,)
         ).fetchone()[0]
         if usage_count > 0:
-            log.warning(f"Course '{course}' is still in use by {usage_count} cases.")
+            self.log.warning(
+                f"Course '{course}' is still in use by {usage_count} cases."
+            )
             return
         self.execute("DELETE FROM Courses WHERE name = ?", (course,))
         self.commit()
 
     def fetchCourses(self) -> list[str]:
         """Fetch all course names from the database."""
-        log.debug("Fetching course names from SQL")
+        self.log.debug("Fetching course names from SQL")
         self.execute("SELECT name FROM Courses")
         courses = [row[0] for row in self.cursor.fetchall()]
         return courses
 
 
-class Latex:
+class Latex(Logged):
     """A class to handle LaTeX document generation."""
 
     def __init__(self):
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
         self.engine_path: Path = global_vars.tinitex_binary
         self.tex_dir: Path = global_vars.cases_dir
         self.render_dir: Path = global_vars.cases_output_dir
@@ -595,7 +713,7 @@ class Latex:
         plaintiff_str = tex_escape(brief.plaintiff)
         defendant_str = tex_escape(brief.defendant)
         citation_str = tex_escape(brief.citation)
-        subjects_str = ", ".join(str(s) for s in brief.subject)
+        subjects_str = ", ".join(str(s) for s in brief.subjects)
         opinions_str = ("\n").join(str(op) for op in brief.opinions)
         opinions_str = tex_escape(
             opinions_str
@@ -782,10 +900,12 @@ class Latex:
 
         for key, expected_type in ResultsExpected.__annotations__.items():
             if key not in results:
-                log.error(f"Case brief is missing {key}.")
+                self.log.error(f"Case brief is missing {key}.")
                 return False
             if not isinstance(results[key], expected_type):
-                log.error(f"Case brief {key} is not of type {expected_type.__name__}.")
+                self.log.error(
+                    f"Case brief {key} is not of type {expected_type.__name__}."
+                )
                 return False
         return True
 
@@ -813,25 +933,28 @@ class Latex:
                 or process.exitCode() != 0
             ):
                 error_output = process.readAllStandardError().data().decode()
-                log.error(f"Error compiling {tex_file} to PDF: {error_output}")
+                self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
                 raise RuntimeError(
                     f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
                 )
             else:
                 clean_dir(str(self.tex_dir))
-            log.info(f"Compiled {tex_file} to {pdf_file}")
+            self.log.info(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
-            log.error(f"Error compiling {tex_file} to PDF: {e}")
+            self.log.error(f"Error compiling {tex_file} to PDF: {e}")
             raise RuntimeError(
                 f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
             )
 
 
-class Subject:
+class Subject(Logged):
     """A class to represent a legal subject."""
 
     def __init__(self, name: str):
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
         self.name = name
 
     def __str__(self) -> str:
@@ -849,10 +972,13 @@ class Subject:
         return f"Subject(name={self.name})"
 
 
-class Label:
+class Label(Logged):
     """A class to represent the citable label of a case."""
 
     def __init__(self, label: str):
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
         self.text = label
 
     def __str__(self) -> str:
@@ -870,10 +996,13 @@ class Label:
         return f"Label(label={self.text})"
 
 
-class Opinion:
+class Opinion(Logged):
     """A class to represent a court opinion."""
 
     def __init__(self, author: str, text: str):
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
         self.author = author
         self.text = text
 
@@ -881,7 +1010,7 @@ class Opinion:
         return f"{self.author}: {self.text}\n"
 
 
-class CaseBrief:
+class CaseBrief(Logged):
     """
     A class to manage case briefs.
 
@@ -938,7 +1067,10 @@ class CaseBrief:
             label (Label): A Label object representing the citable label of the case.
             notes (str): A string containing any additional notes about the case.
         """
-        self.subject = subject
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
+        self.subjects = subject
         self.plaintiff = plaintiff
         self.defendant = defendant
         self.course = course
@@ -963,15 +1095,15 @@ class CaseBrief:
 
     def add_subject(self, subject: Subject) -> None:
         """Add a subject to the case brief."""
-        self.subject.append(subject)
+        self.subjects.append(subject)
 
     def remove_subject(self, subject: Subject) -> None:
         """Remove a subject from the case brief."""
-        self.subject = [s for s in self.subject if s != subject]
+        self.subjects = [s for s in self.subjects if s != subject]
 
     def update_subject(self, old_subject: Subject, new_subject: Subject) -> None:
         """Update a subject in the case brief."""
-        self.subject = [new_subject if s == old_subject else s for s in self.subject]
+        self.subjects = [new_subject if s == old_subject else s for s in self.subjects]
 
     def update_plaintiff(self, plaintiff: str) -> None:
         """Update the plaintiff in the case brief."""
@@ -1032,7 +1164,7 @@ class CaseBrief:
     def to_latex(self) -> str:
         """Generate a LaTeX representation of the case brief."""
         citation_str = tex_escape(self.citation)
-        subjects_str = ", ".join(str(s) for s in self.subject)
+        subjects_str = ", ".join(str(s) for s in self.subjects)
         opinions_str = ("\n").join(str(op) for op in self.opinions)
         opinions_str = tex_escape(
             opinions_str
@@ -1112,7 +1244,7 @@ class CaseBrief:
         )
 
     def to_sql(self) -> None:
-        log.debug(f"Saving case brief '{self.label.text}' to SQL database")
+        self.log.debug(f"Saving case brief '{self.label.text}' to SQL database")
         conn = sqlite3.connect(str(global_vars.sql_dst_file))
         conn.execute("PRAGMA foreign_keys = ON")
         curr = conn.cursor()
@@ -1152,7 +1284,7 @@ class CaseBrief:
             )
 
             # Clear existing subjects and opinions
-            log.debug("Deleting existing subjects and opinions")
+            self.log.debug("Deleting existing subjects and opinions")
             curr.execute(
                 "DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,)
             )
@@ -1161,8 +1293,8 @@ class CaseBrief:
             )
 
             # Insert subjects
-            for subject in self.subject:
-                log.trace("Saving Subject: ", subject.name)
+            for subject in self.subjects:
+                self.log.trace("Saving Subject: ", subject.name)
                 curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
                 subject_id = curr.fetchone()
                 if not subject_id:
@@ -1184,7 +1316,7 @@ class CaseBrief:
 
             # Insert opinions
             for opinion in self.opinions:
-                log.trace("Saving Opinion By: ", opinion.author)
+                self.log.trace("Saving Opinion By: ", opinion.author)
                 curr.execute(
                     "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
                 )
@@ -1211,7 +1343,7 @@ class CaseBrief:
             conn.commit()
         except sqlite3.Error as e:
             conn.rollback()
-            log.error(f"Error saving case brief to database: {e}")
+            self.log.error(f"Error saving case brief to database: {e}")
         finally:
             conn.close()
 
@@ -1219,7 +1351,7 @@ class CaseBrief:
         """Save the LaTeX representation of the case brief to a file."""
         with open(filename, "w") as f:
             f.write(self.to_latex())
-        log.info(f"Saved Latex to {filename}")
+        self.log.info(f"Saved Latex to {filename}")
 
     def compile_to_pdf(self) -> str | None:
         """Compile the LaTeX file to PDF."""
@@ -1233,7 +1365,7 @@ class CaseBrief:
             program = global_vars.tinitex_binary
             program_exists = program.exists()
             if not program_exists:
-                log.error(f"TeX program not found: {program}")
+                self.log.error(f"TeX program not found: {program}")
                 return
             # Determine the relative path from global_vars.cases_dir to global_vars.cases_output_dir
             relative_output_dir = os.path.relpath(
@@ -1252,15 +1384,15 @@ class CaseBrief:
                 or process.exitCode() != 0
             ):
                 error_output = process.readAllStandardError().data().decode()
-                log.error(f"Error compiling {tex_file} to PDF: {error_output}")
+                self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
                 return
             else:
                 clean_dir(str(global_vars.cases_dir))
-            log.info(f"Compiled {tex_file} to {pdf_file}")
+            self.log.info(f"Compiled {tex_file} to {pdf_file}")
             process.setWorkingDirectory(cwd)
             return pdf_file
         except Exception as e:
-            log.error(f"Error compiling {tex_file} to PDF: {e}")
+            self.log.error(f"Error compiling {tex_file} to PDF: {e}")
             raise RuntimeError(
                 f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
             )
@@ -1394,23 +1526,31 @@ class CaseBrief:
         return self.label.text == value.label.text
 
 
-class CaseBriefs:
+class CaseBriefs(Logged):
     """A class to manage multiple case briefs."""
 
     def __init__(self):
+        super().__init__(
+            self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
+        )
         self.case_briefs: list[CaseBrief] = []
         self.sql = SQL(db_path=str(global_vars.sql_dst_file))
         self.latex = Latex()
 
+    @property
+    def subjects(self) -> list[Subject]:
+        """Get all subjects from the case briefs."""
+        return [subject for cb in self.case_briefs for subject in cb.subjects]
+
     def reload_cases_tex(self) -> None:
         """Reload all case briefs from the ./Cases directory."""
-        log.info("Reloading case briefs from TeX files...")
+        self.log.info("Reloading case briefs from TeX files...")
         case_path = strict_path(global_vars.cases_dir)
         for filename in os.listdir(case_path):
             if filename.endswith(".tex"):
                 brief = self.latex.loadBrief(os.path.join(case_path, filename))
                 if brief not in self.case_briefs:
-                    log.trace(f"Adding case brief: {brief.title}")
+                    self.log.trace(f"Adding case brief: {brief.title}")
                     self.case_briefs.append(brief)
 
     def reload_cases_sql(self) -> None:
@@ -1430,7 +1570,7 @@ class CaseBriefs:
             if cb.label == case_brief.label:
                 self.case_briefs[index] = case_brief
                 return
-        log.error(f"Case brief with label '{case_brief.label.text}' not found.")
+        self.log.error(f"Case brief with label '{case_brief.label.text}' not found.")
         raise ValueError(f"Case brief with label '{case_brief.label.text}' not found.")
 
     def remove_case_brief(self, case_brief: CaseBrief) -> None:
@@ -1441,93 +1581,6 @@ class CaseBriefs:
         """Get all case briefs in the collection."""
         return sorted(self.case_briefs, key=lambda cb: cb.label.text)
 
-    """
-    def reload_cases_tex(self) -> None:
-        \"""Reload all case briefs from the ./Cases directory.""\"
-        log.info("Reloading case briefs from TeX files...")
-        for filename in os.listdir(os.path.join(base_dir, "Cases")):
-            if filename.endswith(".tex"):
-                brief = CaseBrief.load_from_file(os.path.join(base_dir, "Cases", filename))
-                if brief not in self.case_briefs:
-                    log.trace(f"Adding case brief: {brief.title}")
-                    self.case_briefs.append(brief)"""
 
-    """
-    def reload_cases_sql(self) -> None:
-        \"""Reload all case briefs from the SQL database.""\"
-        log.info("Reloading case briefs from SQL database...")
-        conn = sqlite3.connect(db_path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        curr = conn.cursor()
-        curr.execute("SELECT label FROM Cases")
-        labels = [Label(row[0]) for row in curr.fetchall()]
-        for label in labels:
-            case_brief = CaseBrief.load_from_sql(label.text)
-            if case_brief not in self.case_briefs:
-                self.add_case_brief(case_brief)
-        conn.close()"""
-
-    """
-    def cite_case_brief(self, case_brief_label: str) -> str:
-        \"""Cite a case brief by its label.""\"
-        log.debug(f"Citing case brief with label: {case_brief_label}")
-        for case_brief in self.case_briefs:
-            log.trace(f"Checking case brief: {case_brief.label.text} against {case_brief_label}")
-            if case_brief.label == case_brief_label:
-                return f"\\hyperref[case:{case_brief.label.text}]{{\\textit{{{case_brief.title}}}}}"
-        return f"CITE({case_brief_label})"  # Fallback if case brief not found
-    
-    def load_cases_tex(self, path: str) -> None:
-        "\""Load all case briefs from the specified directory."\""
-        log.info(f"Loading case briefs from TeX files in {path}...")
-        for filename in os.listdir(path):
-            if filename.endswith(".tex"):
-                full_path = os.path.join(path, filename)
-                brief = CaseBrief.load_from_file(full_path)
-                if brief not in self.case_briefs:
-                    log.trace(f"Adding case brief: {brief.title}")
-                    self.case_briefs.append(brief)
-
-    
-    def load_cases_sql(self) -> None:
-        ""\"Load all case briefs from the SQL database.""\"
-        log.info("Loading case briefs from SQL database...")
-        conn = sqlite3.connect(db_path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        curr = conn.cursor()
-        curr.execute("SELECT label FROM Cases")
-        labels = [Label(row[0]) for row in curr.fetchall()]
-        for label in labels:
-            log.trace(f"Loading case brief for label: {label.text}")
-            self.add_case_brief(CaseBrief.load_from_sql(label.text))
-        conn.close()
-
-    def save_cases_sql(self) -> None:
-        log.info("Saving all case briefs to SQL database")
-        for case in self.case_briefs:
-            case.to_sql()"""
-
-
-def reload_subjects(case_briefs: list[CaseBrief]) -> list[Subject]:
-    log.debug("Reloading subjects from case briefs")
-    subjects: list[Subject] = []
-    for case_brief in case_briefs:
-        for subject in case_brief.subject:
-            if subject not in subjects:
-                subjects.append(subject)
-    return subjects
-
-
-def reload_labels(case_briefs: list[CaseBrief]) -> list[Label]:
-    log.debug("Reloading labels from case briefs")
-    labels: list[Label] = []
-    for case_brief in case_briefs:
-        if case_brief.label not in labels:
-            labels.append(case_brief.label)
-    return labels
-
-
-global case_briefs, subjects, labels
+global case_briefs
 case_briefs = CaseBriefs()
-subjects = reload_subjects(case_briefs.get_case_briefs())
-labels = reload_labels(case_briefs.get_case_briefs())
