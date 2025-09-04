@@ -27,6 +27,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Union, Final
+
 global log
 
 __all__ = [
@@ -40,12 +41,16 @@ __all__ = [
 TRACE_LEVEL_NUM: Final[int] = 5
 logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
 
+
 def strict(input: Any | None) -> Any:
     if input is None:
         raise ValueError("Input cannot be None")
     return input
 
-def _logger_trace(self: logging.Logger, msg: str, *args: object, **kwargs: object) -> None:
+
+def _logger_trace(
+    self: logging.Logger, msg: str, *args: object, **kwargs: object
+) -> None:
     """
     Add a `.trace()` method to `logging.Logger`.
 
@@ -89,7 +94,9 @@ def _iso_utc(ts: float) -> str:
     str
         ISO-8601 formatted timestamp in UTC, e.g. '2025-08-28T14:03:12Z'.
     """
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    )
 
 
 def _ensure_dir_for(file_path: str) -> None:
