@@ -25,17 +25,10 @@ from PyQt6.QtCore import QUrl, QProcess, pyqtSlot
 from PyQt6.QtGui import QDesktopServices
 from cleanup import clean_dir
 from typing import Any, Callable
-from CaseBrief import (
-    CaseBrief,
-    Subject,
-    Label,
-    Opinion,
-    case_briefs,
-    SQL,
-    global_vars,
-)
+from CaseBrief import CaseBrief, Subject, Label, Opinion, case_briefs, SQL
 
 from logger import Logged
+from Global_Vars import global_vars
 
 
 from PyQt6.QtWidgets import QTextEdit
