@@ -82,7 +82,11 @@ class Global_Vars:
             self.sql_dst_file = self.sql_dst_dir / "Cases.sqlite"
             self.sql_create = self.sql_src_dir / "Create_DB.sql"
             self.backup_location = self.write_dir / "Backup"
-        self.tinitex_binary = self.res_dir / "bin" / "tinitex" if os.name != "nt" else self.res_dir / "bin" / "tinitex.exe"
+        self.tinitex_binary = (
+            self.res_dir / "bin" / "tinitex"
+            if os.name != "nt"
+            else self.res_dir / "bin" / "tinitex.exe"
+        )
         self.__setattr__ = self._setattr_
         for d in (
             self.write_dir,
@@ -205,17 +209,18 @@ def tex_escape(input: str) -> str:
         "{": "\\{",
         "}": "\\}",
         "$": "\\$",
-        "&": "\\&",
         "%": "\\%",
         "#": "\\#",
         "_": "\\_",
         "~": "\\textasciitilde{}",
         "^": "\\textasciicircum{}",
+        "&": "\\&",
     }
     return (
         str.translate(input, str.maketrans(replacements))
         .replace("\n", r"\\" + "\n")
         .replace(". ", r".\ ")
+        .replace("...", r"\ldots")
     )
 
 
@@ -225,17 +230,18 @@ def tex_unescape(input: str) -> str:
         "\\{": "{",
         "\\}": "}",
         "\\$": "$",
-        "\\&": "&",
         "\\%": "%",
         "\\#": "#",
         "\\_": "_",
         "\\textasciitilde{}": "~",
         "\\textasciicircum{}": "^",
+        "\\&": "&",
     }
     return (
         str.translate(input, str.maketrans(replacements))
         .replace(r"\\" + "\n", "\n")
         .replace(r".\ ", ". ")
+        .replace(r"\ldots", "...")
     )
 
 
@@ -580,12 +586,14 @@ class Latex:
     """A class to handle LaTeX document generation."""
 
     def __init__(self):
-        self.engine_path: Path = global_vars.write_dir / "bin" / "tinitex"
+        self.engine_path: Path = global_vars.tinitex_binary
         self.tex_dir: Path = global_vars.cases_dir
         self.render_dir: Path = global_vars.cases_output_dir
 
     def _brief2Latex(self, brief: "CaseBrief") -> str:
         """Convert a CaseBrief object to its LaTeX representation."""
+        plaintiff_str = tex_escape(brief.plaintiff)
+        defendant_str = tex_escape(brief.defendant)
         citation_str = tex_escape(brief.citation)
         subjects_str = ", ".join(str(s) for s in brief.subject)
         opinions_str = ("\n").join(str(op) for op in brief.opinions)
@@ -618,6 +626,7 @@ class Latex:
             lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
             issue_str,
         )
+        holding_str = tex_escape(brief.holding)
         principle_str = tex_escape(brief.principle)
         reasoning_str = tex_escape(brief.reasoning)
         notes_str = tex_escape(
@@ -651,14 +660,14 @@ class Latex:
             \\end{document}
         """ % (
             subjects_str,
-            brief.plaintiff,
-            brief.defendant,
+            plaintiff_str,
+            defendant_str,
             citation_str,
             brief.course,
             facts_str,
             procedure_str,
             issue_str,
-            brief.holding,
+            holding_str,
             principle_str,
             reasoning_str,
             opinions_str,
@@ -676,8 +685,8 @@ class Latex:
             subjects = [
                 Subject(s.strip()) for s in match.group(1).split(",") if s.strip()
             ]
-            plaintiff = match.group(2).strip()
-            defendant = match.group(3).strip()
+            plaintiff = tex_unescape(match.group(2).strip())
+            defendant = tex_unescape(match.group(3).strip())
             citation = tex_unescape(match.group(4).strip())
             course = match.group(5).strip()
             facts = tex_unescape(
@@ -696,7 +705,7 @@ class Latex:
             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             # Regex replace existing citations with the CITE(\1)
             issue = re.sub(citation_regex, r"CITE(\1)", issue)
-            holding = match.group(9).strip()
+            holding = tex_unescape(match.group(9).strip())
             principle = tex_unescape(match.group(10).strip())
             reasoning = tex_unescape(
                 match.group(11).strip()
@@ -1215,13 +1224,27 @@ class CaseBrief:
     def compile_to_pdf(self) -> str | None:
         """Compile the LaTeX file to PDF."""
         tex_file = strict_path(global_vars.cases_dir) / f"{self.filename}.tex"
-        self.save_to_file(str(tex_file))
+        case_briefs.latex.saveBrief(self)
         pdf_file = self.get_pdf_path()
         if os.path.exists(pdf_file):
             os.remove(pdf_file)
         try:
             process: QProcess = QProcess()
-            process.start(str(global_vars.res_dir / "bin" / "tinitex"), [str(tex_file)])
+            program = global_vars.tinitex_binary
+            program_exists = program.exists()
+            if not program_exists:
+                log.error(f"TeX program not found: {program}")
+                return
+            # Determine the relative path from global_vars.cases_dir to global_vars.cases_output_dir
+            relative_output_dir = os.path.relpath(
+                global_vars.cases_output_dir, global_vars.cases_dir
+            )
+            cwd = os.getcwd()
+            process.setWorkingDirectory(str(global_vars.cases_dir))
+            arguments = [f"--output-dir={relative_output_dir}", str(tex_file)]
+            process.setProgram(str(global_vars.tinitex_binary))
+            process.setArguments(arguments)
+            process.start()
             # process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
             process.waitForFinished()
             if (
@@ -1234,6 +1257,7 @@ class CaseBrief:
             else:
                 clean_dir(str(global_vars.cases_dir))
             log.info(f"Compiled {tex_file} to {pdf_file}")
+            process.setWorkingDirectory(cwd)
             return pdf_file
         except Exception as e:
             log.error(f"Error compiling {tex_file} to PDF: {e}")
