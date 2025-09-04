@@ -311,7 +311,7 @@ log.debug(f"Base Directory: {global_vars.write_dir}")
 
 def tex_escape(input: str) -> str:
     """Escape special characters for LaTeX."""
-    replacements = {
+    replacements: dict[str, str | int | None] = {
         "{": "\\{",
         "}": "\\}",
         "$": "\\$",
@@ -332,7 +332,7 @@ def tex_escape(input: str) -> str:
 
 def tex_unescape(input: str) -> str:
     """Unescape special characters for LaTeX."""
-    replacements = {
+    replacements: dict[str, str | int | None] = {
         "\\{": "{",
         "\\}": "}",
         "\\$": "$",
@@ -1385,7 +1385,7 @@ class CaseBrief(Logged):
             program_exists = program.exists()
             if not program_exists:
                 self.log.error(f"TeX program not found: {program}")
-                return
+                return None
             # Determine the relative path from global_vars.cases_dir to global_vars.cases_output_dir
             relative_output_dir = os.path.relpath(
                 global_vars.cases_output_dir, global_vars.cases_dir
@@ -1404,7 +1404,7 @@ class CaseBrief(Logged):
             ):
                 error_output = process.readAllStandardError().data().decode()
                 self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
-                return
+                return None
             else:
                 clean_dir(str(global_vars.cases_dir))
             self.log.info(f"Compiled {tex_file} to {pdf_file}")

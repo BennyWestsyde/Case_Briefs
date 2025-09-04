@@ -47,16 +47,16 @@ from GUI import CaseBriefInit, CaseBriefApp
 
 if __name__ == "__main__":
     # Create a simple gui for the application
-    app = QApplication(sys.argv)
+    app: QApplication = QApplication(sys.argv)
     app.setWindowIcon(QIcon("ui/text.book.closed.png"))
-    window = CaseBriefInit()
-    window.show()
-    if window.initializer.complete:
+    init_window: CaseBriefInit = CaseBriefInit()
+    init_window.show()
+    if init_window.initializer.complete:
         log.info("Initialization complete, launching main application")
-    while window.isVisible():
+    while init_window.isVisible():
         app.processEvents()
-    window = CaseBriefApp()
-    window.show()
+    app_window: CaseBriefApp = CaseBriefApp()
+    app_window.show()
     sys.exit(app.exec())
 else:
     print("This module is intended to be run as a standalone application.")

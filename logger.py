@@ -26,7 +26,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, Mapping, MutableMapping, Optional, Union, Final
+from typing import Any, Dict, Mapping, Optional, Union, Final, cast
 
 global log
 
@@ -142,7 +142,7 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         obj: Dict[str, Any] = {
             "timestamp": _iso_utc(record.created),
-            "level": record.levelname,
+            "level": logging.getLevelName(record.levelno),
             "logger": record.name,
             "message": record.getMessage(),
             "module": record.module,
@@ -199,18 +199,19 @@ class ColorFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         ts = _iso_utc(record.created)
-        level = record.levelname
+        level = logging.getLevelName(record.levelno)
         logger_name = record.name
         message = record.getMessage()
 
         # Build kv string if present
         kv_str = ""
-        kv: Any = getattr(record, "kv", None)
-        if isinstance(kv, dict) and kv:
-            parts = []
-            for k, v in kv.items():
+        kv_any: Any = getattr(record, "kv", None)
+        if isinstance(kv_any, dict) and kv_any:
+            typed_kv: Mapping[str, Any] = cast(Mapping[str, Any], kv_any)
+            parts: list[str] = []
+            for k, v in typed_kv.items():
                 try:
-                    val = json.dumps(v, ensure_ascii=False, default=str)
+                    val: str = json.dumps(v, ensure_ascii=False, default=str)
                 except Exception:
                     val = repr(v)
                 parts.append(f"{k}={val}")
@@ -373,21 +374,26 @@ class StructuredLogger:
         msg: str,
         *args: object,
         fields: Optional[Fields] = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> None:
         """
         Internal helper that merges `fields` into `extra={"kv": ...}` for
         consumption by our formatters, then delegates to the underlying logger.
         """
-        extra_obj: MutableMapping[str, Any]
+        extra_obj: Dict[str, Any]
         extra_any: Any = kwargs.pop("extra", None)
-        extra_obj = dict(extra_any) if isinstance(extra_any, dict) else {}
+        if isinstance(extra_any, dict):
+            # Copy and narrow to the expected key/value types
+            extra_obj = dict(cast(Dict[str, Any], extra_any))
+        else:
+            extra_obj = {}
 
         # Merge fields under "kv" (used by our formatters)
         kv_current: Dict[str, Any] = {}
-        if isinstance(extra_obj.get("kv"), dict):
+        existing_kv = extra_obj.get("kv")
+        if isinstance(existing_kv, dict):
             # Copy to avoid mutating caller-provided dict
-            kv_current.update(extra_obj["kv"])  # type: ignore[arg-type]
+            kv_current.update(cast(Dict[str, Any], existing_kv))
         if fields:
             kv_current.update(dict(fields))
         if kv_current:

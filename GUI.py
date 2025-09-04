@@ -168,7 +168,7 @@ class SpellLineEdit(QLineEdit):
                 menu.addSeparator()
                 for sug in suggestions[:5]:
                     action: QAction = strict(menu.addAction(f"Replace with '{sug}'"))
-                    action.triggered.connect(partial(self._on_replace, cursor=cursor, replacement=sug))  # type: ignore[arg-type]
+                    action.triggered.connect(partial(self._on_replace, start=start, end=end, replacement=sug))  # type: ignore[arg-type]
 
             add_action: QAction = strict(menu.addAction("Add to dictionary"))
             add_action.triggered.connect(partial(self._on_add_to_dictionary, word=word))  # type: ignore[arg-type]
@@ -633,7 +633,7 @@ class CaseBriefManager(Logged, QWidget):
                 i, 0
             )  # pyright: ignore[reportAssignmentType, reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
             if item:
-                widget: QWidget = (
+                widget: QWidget = strict(
                     item.widget()
                 )  # pyright: ignore[reportUnknownVariableType, reportAssignmentType, reportUnknownMemberType]
                 if isinstance(widget, QLabel):
