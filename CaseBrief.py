@@ -362,7 +362,7 @@ class SQL(Logged):
             self.__class__.__name__, str(global_vars.write_dir / "CaseBriefs.self.log")
         )
         self.db_path = db_path
-        self.ensureDB()
+        self._ensure_db()
         self.connection = sqlite3.connect(self.db_path)
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.cursor = self.connection.cursor()
@@ -372,7 +372,7 @@ class SQL(Logged):
         self.log.trace("Checking if database exists")
         return Path(self.db_path).exists()
 
-    def ensureDB(self) -> bool:
+    def _ensure_db(self) -> bool:
         """Ensure the database and tables exist."""
         self.log.debug("Ensuring database exists")
         if not self.exists():
@@ -386,6 +386,25 @@ class SQL(Logged):
             return True
         else:
             self.log.debug("Database found")
+            return True
+
+    @staticmethod
+    def ensure_db(
+        log: StructuredLogger, db_path: str = str(global_vars.sql_dst_file)
+    ) -> bool:
+        """Static method to ensure the database and tables exist."""
+        log.debug("Ensuring database exists")
+        if not Path(db_path).exists():
+            log.warning(f"Database not found, creating at {db_path}")
+            with sqlite3.connect(db_path) as conn:
+                with open(
+                    strict_path(global_vars.sql_create), "r", encoding="utf-8"
+                ) as f:
+                    conn.executescript(f.read())
+            log.debug("Database created successfully")
+            return True
+        else:
+            log.debug("Database found")
             return True
 
     def execute(

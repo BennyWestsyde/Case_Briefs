@@ -1074,25 +1074,12 @@ class Initializer(Logged):
         relative_print_path = db_path.relative_to(global_vars.write_dir)
         self.log.debug(f"Ensuring database exists: {relative_print_path}")
         self.console.append(f"Ensuring database exists: {relative_print_path}\n")
-        sql: SQL = SQL(str(db_path))
-        if not sql.exists():
-            self.log.debug(f"Database does not exist, creating: {relative_print_path}")
-            self.console.append(
-                f"Database does not exist, creating: {relative_print_path}\n"
-            )
-            if sql.ensureDB():
-                self.log.info(f"Created database: {relative_print_path}")
-                self.console.append(f"Created database: {relative_print_path}\n")
-            else:
-                self.log.error(f"Failed to create database: {relative_print_path}")
-                self.console.append(
-                    f"Failed to create database: {relative_print_path}\n"
-                )
+        if not SQL.ensure_db(log=self.log, db_path=str(db_path)):
+            self.log.info(f"Created database: {relative_print_path}")
+            self.console.append(f"Created database: {relative_print_path}\n")
         else:
             self.log.info(f"Database already exists: {relative_print_path}")
             self.console.append(f"Database already exists: {relative_print_path}\n")
-        sql.close()
-        del sql
         self._emit_progress(f"Ensured database {relative_print_path}")
 
     def ensure_move(self, src_dst: tuple[Path, Path]) -> None:
