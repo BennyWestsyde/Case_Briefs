@@ -1216,7 +1216,7 @@ class CaseBriefApp(QMainWindow):
             process.setWorkingDirectory(str(global_vars.write_dir))
             output_path = "../TMP"
             log.debug(f"Relative output path for LaTeX: {output_path}")
-            program = global_vars.res_dir / "bin" / "tinitex"
+            program = global_vars.tinitex_binary
             program_exists = program.exists()
             if not program_exists:
                 log.error(f"Program not found: {program}")
