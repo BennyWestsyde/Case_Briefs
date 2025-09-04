@@ -30,11 +30,6 @@ jobs:
             runner: windows-latest
           - arch: all
             runner: windows-latest
-            # Linux
-          - arch: x86_64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-latest
 
     runs-on: ${{ matrix.runner }}
 
@@ -126,9 +121,6 @@ jobs:
               Windows:
                 - x86_64: CaseBriefs-x86_64.zip   (Windows 64-bit)
                 - xarm64:  CaseBriefs-arm64.zip    (Windows ARM 64-bit)
-              Linux:
-                - x86_64: CaseBriefs-x86_64.zip   (Linux 64-bit)
-                - arm64:  CaseBriefs-arm64.zip    (Linux ARM 64-bit)
           draft: false
           prerelease: false
 
@@ -190,25 +182,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/CaseBriefs-windows-all/CaseBriefs-windows-all.zip
           asset_name: CaseBriefs-windows-all.zip
-          asset_content_type: application/zip
-
-      - name: Upload x86_64 Linux asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/CaseBriefs-linux-x86_64/CaseBriefs-linux-x86_64.zip
-          asset_name: CaseBriefs-linux-x86_64.zip
-          asset_content_type: application/zip
-
-
-      - name: Upload arm64 Linux asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/CaseBriefs-linux-arm64/CaseBriefs-linux-arm64.zip
-          asset_name: CaseBriefs-linux-arm64.zip
           asset_content_type: application/zip
