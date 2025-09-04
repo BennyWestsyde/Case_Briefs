@@ -1,4 +1,4 @@
-name: Build macOS App (PyInstaller)
+name: Build and Package CaseBriefs App (PyInstaller)
 
 on:
   workflow_dispatch:
