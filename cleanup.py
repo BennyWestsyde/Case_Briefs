@@ -1,5 +1,6 @@
 import os
 from logger import StructuredLogger
+from pathlib import Path
 
 log = StructuredLogger("Cleanup", "TRACE", "CaseBriefs.log", True, None, True, True)
 
@@ -34,5 +35,5 @@ def clean_dir(path: str):
 
 
 if __name__ == "__main__":
-    curr_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    clean_dir(curr_path)
+    curr_path = Path(__file__).absolute().parent
+    clean_dir(str(curr_path))
