@@ -42,6 +42,8 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
+          # Match Python arch to your matrix (only needed if you truly build 32-bit)
+          architecture: ${{ matrix.arch == 'x86' && 'x86' || 'x64' }}
 
       - name: Install dependencies
         shell: bash
@@ -56,15 +58,37 @@ jobs:
         shell: bash
         run: |
           pyinstaller CaseBriefs.spec
-          test -d dist/CaseBriefs.app
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            test -d dist/CaseBriefs.app
+          else
+            test -f "dist/CaseBriefs/CaseBriefs.exe"
+          fi
 
+      # macOS packaging
       - name: Package .app as zip (preserve metadata)
+        if: startsWith(matrix.runner, 'macos-')
         shell: bash
         run: |
           cd dist
-          ditto -c -k --sequesterRsrc --keepParent "CaseBriefs.app" "CaseBriefs-${{matrix.runner}}-${{ matrix.arch }}.zip"
-          ls -lah "CaseBriefs-${{matrix.runner}}-${{ matrix.arch }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "CaseBriefs.app" "CaseBriefs-${{ matrix.runner }}-${{ matrix.arch }}.zip"
+          ls -lah "CaseBriefs-${{ matrix.runner }}-${{ matrix.arch }}.zip"
 
+      # Windows packaging
+      - name: Package .exe as zip
+        if: contains(matrix.runner, 'windows')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "dist/CaseBriefs/*" -DestinationPath "dist/CaseBriefs-${{ matrix.runner }}-${{ matrix.arch }}.zip" -Force
+          Get-Item "dist/CaseBriefs-${{ matrix.runner }}-${{ matrix.arch }}.zip" | Format-List *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CaseBriefs-${{ matrix.runner }}-${{ matrix.arch }}
+          path: dist/CaseBriefs-${{ matrix.runner }}-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
