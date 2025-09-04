@@ -2,6 +2,7 @@
 ../Cases/Big_Town_Nursing_Home,_Inc_V_Newman.tex
 ../Cases/Brown_V_Kendall.tex
 ../Cases/Cohen_V_Petty.tex
+../Cases/Commerce_&_Industry_Insurance_Co_V_Bayer_Corp.tex
 ../Cases/Continental_Laboratories_V_Scott_Paper_Co.tex
 ../Cases/Day_V_Caton.tex
 ../Cases/Dickinson_V_Dodds.tex
@@ -23,6 +24,7 @@
 ../Cases/Norcia_V_Samsung_Telecommunications_America,_LLC.tex
 ../Cases/Parvi_V_City_of_Kingston.tex
 ../Cases/Petterson_V_Pattberg.tex
+../Cases/Princess_Cuise_Lines_V_GE.tex
 ../Cases/Ranson_V_Kitner.tex
 ../Cases/Slocum_V_Food_Fair_Stores_of_Florida.tex
 ../Cases/Spano_V_Perini_Corp.tex
