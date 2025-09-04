@@ -41,6 +41,7 @@ class Global_Vars:
         self.sql_dst_file: Path = Path()
         self.sql_create: Path = Path()
         self.backup_location: Path = Path()
+        self.tinitex_binary: Path = Path()
         results: dict[str, Path] | None = self.load_from_json()
         if results:
             self.log.info("Loaded global variables from JSON")
@@ -81,6 +82,7 @@ class Global_Vars:
             self.sql_dst_file = self.sql_dst_dir / "Cases.sqlite"
             self.sql_create = self.sql_src_dir / "Create_DB.sql"
             self.backup_location = self.write_dir / "Backup"
+        self.tinitex_binary = self.res_dir / "bin" / "tinitex" if os.name != "nt" else self.res_dir / "bin" / "tinitex.exe"
         self.__setattr__ = self._setattr_
         for d in (
             self.write_dir,
