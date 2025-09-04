@@ -243,7 +243,7 @@ SQLiteValue = Union[str, int, float, bytes, None]
 class SQL:
     """A class to handle interaction with the database."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str = str(global_vars.sql_dst_file)):
         self.db_path = db_path
         self.ensureDB()
         self.connection = sqlite3.connect(self.db_path)
@@ -260,7 +260,7 @@ class SQL:
         log.debug("Ensuring database exists")
         if not self.exists():
             log.warning(f"Database not found, creating at {self.db_path}")
-            with sqlite3.connect(str(global_vars.sql_dst_file)) as conn:
+            with sqlite3.connect(str(self.db_path)) as conn:
                 with open(
                     strict_path(global_vars.sql_create), "r", encoding="utf-8"
                 ) as f:
