@@ -25,10 +25,10 @@ from PyQt6.QtCore import QUrl, QProcess, pyqtSlot
 from PyQt6.QtGui import QDesktopServices
 from cleanup import clean_dir
 from typing import Any, Callable
-from CaseBrief import CaseBrief, Subject, Label, Opinion, case_briefs, SQL
+from CaseBrief import CaseBrief, Subject, Label, Opinion, SQL
 
 from logger import Logged
-from Global_Vars import global_vars
+from Global_Vars import Global_Vars
 
 
 from PyQt6.QtWidgets import QTextEdit
@@ -208,10 +208,12 @@ class SpellLineEdit(QLineEdit):
 
 
 class CaseBriefCreator(Logged, QWidget):
-    def __init__(self):
+    def __init__(self, config: Global_Vars, case_briefs: Any):
+        self.global_vars = config
+        self.super_class = case_briefs
         super().__init__(
             class_name=self.__class__.__name__,
-            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+            output_path=str(self.global_vars.write_dir / "CaseBriefs.log"),
         )
         self.log.info("Opening Case Brief Creator")
         case_briefs.reload_cases_sql()
@@ -301,7 +303,9 @@ class CaseBriefCreator(Logged, QWidget):
         subjects_list.itemDoubleClicked.connect(
             lambda: (
                 self.remove_subject(
-                    subjects_list.currentItem().text()  # pyright: ignore[reportOptionalMemberAccess]
+                    strict(
+                        subjects_list.currentItem()
+                    ).text()  # pyright: ignore[reportOptionalMemberAccess]
                 )
                 if subjects_list.currentItem()
                 else None
@@ -444,7 +448,7 @@ class CaseBriefCreator(Logged, QWidget):
 
     def verify_label(self, label: str) -> bool:
         """Verify if the label is unique."""
-        if any(cb.label.text == label for cb in case_briefs.get_case_briefs()):
+        if any(cb.label.text == label for cb in self.super_class.get_case_briefs()):
             QMessageBox.warning(self, "Warning", "Label must be unique.")
             return False
         return True
@@ -483,7 +487,7 @@ class CaseBriefCreator(Logged, QWidget):
                     opinions.append(Opinion(person.strip(), text.strip()))
 
         case_brief = CaseBrief(
-            config=global_vars,
+            config=self.global_vars,
             subject=[Subject(s) for s in subjects],
             plaintiff=plaintiff,
             defendant=defendant,
@@ -498,13 +502,14 @@ class CaseBriefCreator(Logged, QWidget):
             opinions=opinions,
             label=Label(label),
             notes=notes,
+            super_class=self.super_class,
         )
 
         # filename = f"./Cases/{case_brief.filename}.tex"
         # case_brief.save_to_file(filename)
-        case_briefs.add_case_brief(case_brief)
-        case_briefs.sql.saveBrief(case_brief)
-        case_briefs.latex.saveBrief(case_brief)
+        self.super_class.add_case_brief(case_brief)
+        self.super_class.sql.saveBrief(case_brief)
+        self.super_class.latex.saveBrief(case_brief)
         # case_brief.to_sql()
         QMessageBox.information(
             self, "Success", f"Case brief '{case_brief.title}' created successfully!"
@@ -523,10 +528,12 @@ class CaseBriefManager(Logged, QWidget):
     and allow the user to select one and search existing case briefs then edit them.
     """
 
-    def __init__(self):
+    def __init__(self, config: Global_Vars, case_briefs: Any):
+        self.global_vars = config
+        self.super_class = case_briefs
         super().__init__(
             class_name=self.__class__.__name__,
-            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+            output_path=str(self.global_vars.write_dir / "CaseBriefs.log"),
         )
         self.log.info("Initializing Case Brief Manager")
         case_briefs.reload_cases_sql()
@@ -538,7 +545,7 @@ class CaseBriefManager(Logged, QWidget):
         scrollable_area.setWidgetResizable(True)
 
         content_widget = QWidget()
-        content_layout = QGridLayout(content_widget)
+        content_layout: QGridLayout = QGridLayout(content_widget)
         scrollable_area.setWidget(content_widget)
 
         main_layout = QVBoxLayout(self)
@@ -591,7 +598,7 @@ class CaseBriefManager(Logged, QWidget):
         )
 
         # CaseBriefManager.__init__
-        self._pdf_windows = []  # keep viewers alive
+        self._pdf_windows: list[QWidget] = []
 
     @pyqtSlot(CaseBrief)
     def _make_view_handler(self, cb: CaseBrief) -> Callable[[bool], None]:
@@ -623,8 +630,8 @@ class CaseBriefManager(Logged, QWidget):
         for i in range(
             self.content_layout.rowCount()
         ):  # pyright: ignore[reportUnknownArgumentType, reportAttributeAccessIssue, reportUnknownMemberType]
-            item: QLayoutItem = self.content_layout.itemAtPosition(
-                i, 0
+            item: QLayoutItem = strict(
+                self.content_layout.itemAtPosition(i, 0)
             )  # pyright: ignore[reportAssignmentType, reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
             if item:
                 widget: QWidget = strict(
@@ -636,26 +643,26 @@ class CaseBriefManager(Logged, QWidget):
                         or text.lower() in widget.toolTip().lower()
                     ):
                         widget.show()
-                        self.content_layout.itemAtPosition(
-                            i, 1
-                        ).widget().show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
-                        self.content_layout.itemAtPosition(
-                            i, 2
-                        ).widget().show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the view button as well
+                        strict(
+                            strict(self.content_layout.itemAtPosition(i, 1)).widget()
+                        ).show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
+                        strict(
+                            strict(self.content_layout.itemAtPosition(i, 2)).widget()
+                        ).show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the view button as well
                     else:
                         widget.hide()
-                        self.content_layout.itemAtPosition(
-                            i, 1
-                        ).widget().hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
-                        self.content_layout.itemAtPosition(
-                            i, 2
-                        ).widget().hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the view button as well
+                        strict(
+                            strict(self.content_layout.itemAtPosition(i, 1)).widget()
+                        ).hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
+                        strict(
+                            strict(self.content_layout.itemAtPosition(i, 2)).widget()
+                        ).hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the view button as well
 
     @pyqtSlot(str)
     def edit_case_brief(self, case_brief: CaseBrief):
         """View the details of a case brief."""
         # Open the CaseBriefCreator window with the case brief details filled in
-        self.creator = CaseBriefCreator()
+        self.creator = CaseBriefCreator(self.global_vars, self.super_class)
         self.creator.plaintiff_entry.setText(case_brief.plaintiff)
         self.creator.plaintiff_entry.textChanged.disconnect()  # pyright: ignore[reportUnknownMemberType]
         self.creator.defendant_entry.setText(case_brief.defendant)
@@ -747,13 +754,13 @@ class CaseBriefManager(Logged, QWidget):
         case_brief.update_reasoning(reasoning)
         case_brief.opinions = opinions
         case_brief.update_notes(notes)
-        case_briefs.sql.saveBrief(case_brief)
+        self.super_class.sql.saveBrief(case_brief)
         # case_brief.to_sql()
         # Label does not change
         # filename = os.path.join(base_dir, "Cases", f"{case_brief.filename}.tex")
-        case_briefs.latex.saveBrief(case_brief)
+        self.super_class.latex.saveBrief(case_brief)
         # case_brief.save_to_file(filename)
-        case_briefs.update_case_brief(case_brief)
+        self.super_class.update_case_brief(case_brief)
         QMessageBox.information(
             self, "Success", f"Case brief '{case_brief.title}' created successfully!"
         )
@@ -767,10 +774,12 @@ class CaseBriefManager(Logged, QWidget):
 
 
 class SettingsWindow(Logged, QWidget):
-    def __init__(self):
+    def __init__(self, config: Global_Vars, case_briefs: Any):
+        self.super_class = case_briefs
+        self.global_vars = config
         super().__init__(
             class_name=self.__class__.__name__,
-            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+            output_path=str(self.global_vars.write_dir / "CaseBriefs.log"),
         )
         self.log.info("Initializing Settings Window")
         self.setWindowTitle("Settings")
@@ -793,7 +802,7 @@ class SettingsWindow(Logged, QWidget):
         self.remove_class_button.clicked.connect(self.remove_class)
         self.classes_list = QListWidget()
         self.classes_list.addItems(
-            case_briefs.sql.fetchCourses()
+            self.super_class.sql.fetchCourses()
         )  # pyright: ignore[reportUnknownMemberType] # Example classes
         layout.addWidget(self.classes_list, 2, 0, 1, 3)
         self.courses_tab.setLayout(layout)
@@ -805,7 +814,7 @@ class SettingsWindow(Logged, QWidget):
         layout.addWidget(self.paths_label, 0, 0)
         self.case_render_path_label = QLabel(f"Case Render Path: ")
         layout.addWidget(self.case_render_path_label, 1, 0)
-        self.case_render_path = QLabel(f"{global_vars.cases_output_dir}")
+        self.case_render_path = QLabel(f"{self.global_vars.cases_output_dir}")
         layout.addWidget(self.case_render_path, 2, 0)
         self.case_render_path_selector = QFileDialog()
         self.case_render_path_button = QPushButton("Change")
@@ -826,7 +835,7 @@ class SettingsWindow(Logged, QWidget):
         )
         self.backup_restore_toggle.toggled.connect(self.toggle_backup_restore)
         layout.addWidget(self.backup_restore_toggle, 0, 2)
-        self.backup_location = QLabel(f"{global_vars.backup_location}")
+        self.backup_location = QLabel(f"{self.global_vars.backup_location}")
         layout.addWidget(self.backup_location, 1, 0, 1, 3)
         self.backup_location_selector = QFileDialog()
         self.backup_location_button = QPushButton("Change")
@@ -881,8 +890,7 @@ class SettingsWindow(Logged, QWidget):
         )
         if selected_dir and selected_dir != current_path and selected_dir != Path():
             self.backup_location.setText(f"{selected_dir}")
-            global global_vars
-            global_vars.backup_location = Path(selected_dir)
+            self.global_vars.backup_location = Path(selected_dir)
             self.log.debug(f"Set backup location to {selected_dir}")
         else:
             self.backup_location.setText(f"{current_path}")
@@ -901,8 +909,7 @@ class SettingsWindow(Logged, QWidget):
         )
         if selected_dir and selected_dir != current_path and selected_dir != Path():
             self.backup_location.setText(f"{selected_dir}")
-            global global_vars
-            global_vars.tmp_dir = Path(selected_dir)
+            self.global_vars.tmp_dir = Path(selected_dir)
             self.log.debug(f"Set restore location to {selected_dir}")
         else:
             self.backup_location.setText(f"{current_path}")
@@ -913,22 +920,26 @@ class SettingsWindow(Logged, QWidget):
         backup_path = (
             Path(self.backup_location.text()) / f"CaseBriefBackup_{curr_dt}.sql"
         )
-        case_briefs.sql.export_db_file(backup_path)
+        self.super_class.sql.export_db_file(backup_path)
         self.log.info(f"Cases backed up to {backup_path}")
         # Popup a confirmation
         QMessageBox.information(
-            self, "Backup Complete", f"{len(case_briefs.case_briefs)} cases backed up."
+            self,
+            "Backup Complete",
+            f"{len(self.super_class.case_briefs)} cases backed up.",
         )
 
     def restore_cases(self):
         self.log.debug("Restoring cases")
         backup_path = Path(self.backup_location.text())
-        case_briefs.sql.restore_db_file(backup_path)
-        case_briefs.reload_cases_sql()
+        self.super_class.sql.restore_db_file(backup_path)
+        self.super_class.reload_cases_sql()
         self.log.info(f"Cases restored from {backup_path}")
         # Popup a confirmation
         QMessageBox.information(
-            self, "Restore Complete", f"{len(case_briefs.case_briefs)} cases restored."
+            self,
+            "Restore Complete",
+            f"{len(self.super_class.case_briefs)} cases restored.",
         )
 
     def select_case_render_path(self):
@@ -941,8 +952,7 @@ class SettingsWindow(Logged, QWidget):
         )
         if selected_dir and selected_dir != current_path and selected_dir != Path():
             self.case_render_path.setText(f"{selected_dir}")
-            global global_vars
-            global_vars.cases_output_dir = Path(selected_dir)
+            self.global_vars.cases_output_dir = Path(selected_dir)
             self.log.debug(f"Set case render path to {selected_dir}")
         else:
             self.case_render_path.setText(f"{current_path}")
@@ -950,13 +960,13 @@ class SettingsWindow(Logged, QWidget):
     def add_class(self):
         new_class = self.new_class_input.text()
         if new_class:
-            case_briefs.sql.addCourse(new_class)
+            self.super_class.sql.addCourse(new_class)
             self.classes_list.addItem(new_class)
 
     def remove_class(self):
         selected_item = self.classes_list.currentItem()
         if selected_item:
-            case_briefs.sql.removeCourse(selected_item.text())
+            self.super_class.sql.removeCourse(selected_item.text())
             self.classes_list.takeItem(self.classes_list.row(selected_item))
 
     def show(self):
@@ -981,34 +991,36 @@ class Initializer(Logged):
     def __init__(
         self,
         console: QTextEdit,
+        config: Global_Vars,
         on_progress: Optional[Callable[[int, int, str], None]] = None,
     ) -> None:
+        self.global_vars = config
         super().__init__(
             class_name=self.__class__.__name__,
-            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+            output_path=str(self.global_vars.write_dir / "CaseBriefs.log"),
         )
         self.complete: bool = False
         self.console: QTextEdit = console
         self._on_progress = on_progress
         self._step: int = 0
         self._todo: list[tuple[Callable[..., None], tuple[Path, ...]]] = [
-            (self.ensure_dir, (global_vars.tmp_dir,)),
-            (self.ensure_dir, (global_vars.cases_dir,)),
-            (self.ensure_dir, (global_vars.cases_output_dir,)),
-            (self.ensure_dir, (global_vars.tex_src_dir,)),
-            (self.ensure_file, (global_vars.master_src_tex,)),
-            (self.ensure_file, (global_vars.master_src_sty,)),
-            (self.ensure_dir, (global_vars.tex_dst_dir,)),
+            (self.ensure_dir, (self.global_vars.tmp_dir,)),
+            (self.ensure_dir, (self.global_vars.cases_dir,)),
+            (self.ensure_dir, (self.global_vars.cases_output_dir,)),
+            (self.ensure_dir, (self.global_vars.tex_src_dir,)),
+            (self.ensure_file, (self.global_vars.master_src_tex,)),
+            (self.ensure_file, (self.global_vars.master_src_sty,)),
+            (self.ensure_dir, (self.global_vars.tex_dst_dir,)),
             (
                 self.ensure_move,
-                (global_vars.master_src_sty, global_vars.master_dst_sty),
+                (self.global_vars.master_src_sty, self.global_vars.master_dst_sty),
             ),
             (
                 self.ensure_move,
-                (global_vars.master_src_tex, global_vars.master_dst_tex),
+                (self.global_vars.master_src_tex, self.global_vars.master_dst_tex),
             ),
-            (self.ensure_dir, (global_vars.sql_dst_dir,)),
-            (self.ensure_db, (global_vars.sql_dst_file,)),
+            (self.ensure_dir, (self.global_vars.sql_dst_dir,)),
+            (self.ensure_db, (self.global_vars.sql_dst_file,)),
         ]
         self._total: int = len(self._todo)  # 4 dirs + 2 files + 1 db
 
@@ -1029,7 +1041,7 @@ class Initializer(Logged):
 
     def ensure_dir(self, path: tuple[Path]) -> None:
         path_str = path[0]
-        relative_print_path = path_str.relative_to(global_vars.write_dir)
+        relative_print_path = path_str.relative_to(self.global_vars.write_dir)
         self.log.debug(f"Ensuring directory exists: {relative_print_path}")
         self.console.append(f"Ensuring directory exists: {relative_print_path}\n")
         if not path_str.exists():
@@ -1047,7 +1059,7 @@ class Initializer(Logged):
 
     def ensure_file(self, file: tuple[Path]) -> None:
         file_path = file[0]
-        relative_print_path = file_path.relative_to(global_vars.write_dir)
+        relative_print_path = file_path.relative_to(self.global_vars.write_dir)
         self.log.debug(f"Ensuring file exists: {relative_print_path}")
         self.console.append(f"Ensuring file exists: {relative_print_path}\n")
         if not file_path.exists():
@@ -1065,10 +1077,10 @@ class Initializer(Logged):
 
     def ensure_db(self, db: tuple[Path]) -> None:
         db_path = db[0]
-        relative_print_path = db_path.relative_to(global_vars.write_dir)
+        relative_print_path = db_path.relative_to(self.global_vars.write_dir)
         self.log.debug(f"Ensuring database exists: {relative_print_path}")
         self.console.append(f"Ensuring database exists: {relative_print_path}\n")
-        if not SQL.ensure_db(log=self.log, config=global_vars):
+        if not SQL.ensure_db(log=self.log, config=self.global_vars):
             self.log.info(f"Created database: {relative_print_path}")
             self.console.append(f"Created database: {relative_print_path}\n")
         else:
@@ -1079,8 +1091,8 @@ class Initializer(Logged):
     def ensure_move(self, src_dst: tuple[Path, Path]) -> None:
         src = src_dst[0]
         dest = src_dst[1]
-        relative_src_path = src.relative_to(global_vars.write_dir)
-        relative_dest_path = dest.relative_to(global_vars.write_dir)
+        relative_src_path = src.relative_to(self.global_vars.write_dir)
+        relative_dest_path = dest.relative_to(self.global_vars.write_dir)
         self.log.debug(
             f"Ensuring file move from {relative_src_path} to {relative_dest_path}"
         )
@@ -1103,10 +1115,12 @@ class Initializer(Logged):
 
 
 class CaseBriefInit(Logged, QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, config: Global_Vars, case_briefs: Any) -> None:
+        self.super_class = case_briefs
+        self.global_vars = config
         super().__init__(
             class_name=self.__class__.__name__,
-            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+            output_path=str(self.global_vars.write_dir / "CaseBriefs.log"),
         )
         self.log.info("Initializing Case Briefs Initialization Window")
         self.setWindowTitle("Case Briefs Initialization")
@@ -1143,15 +1157,17 @@ class CaseBriefInit(Logged, QMainWindow):
                 next_button.setEnabled(True)
 
         self.initializer = Initializer(
-            self.initializer_console, on_progress=on_progress
+            self.initializer_console, on_progress=on_progress, config=self.global_vars
         )
 
 
 class CaseBriefApp(Logged, QMainWindow):
-    def __init__(self):
+    def __init__(self, config: Global_Vars, case_briefs: Any) -> None:
+        self.super_class = case_briefs
+        self.global_vars = config
         super().__init__(
             class_name=self.__class__.__name__,
-            output_path=str(global_vars.write_dir / "CaseBriefs.log"),
+            output_path=str(self.global_vars.write_dir / "CaseBriefs.log"),
         )
         self.setWindowTitle("Case Briefs Manager")
         self.setGeometry(100, 100, 600, 400)
@@ -1190,13 +1206,13 @@ class CaseBriefApp(Logged, QMainWindow):
     def create_case_brief(self):
         # Logic to create a new case brief
         self.log.info("Creating a new case brief...")
-        self.creator = CaseBriefCreator()
+        self.creator = CaseBriefCreator(self.global_vars, self.super_class)
         self.creator.show()
 
     def view_case_briefs(self):
         # Logic to view existing case briefs
         self.log.info("Viewing existing case briefs...")
-        self.manager = CaseBriefManager()
+        self.manager = CaseBriefManager(self.global_vars, self.super_class)
         self.manager.show()
 
     def render_pdf(self):
@@ -1204,10 +1220,10 @@ class CaseBriefApp(Logged, QMainWindow):
         self.log.info("Rendering PDF for the case brief...")
         try:
             process = QProcess(self)
-            process.setWorkingDirectory(str(global_vars.write_dir))
+            process.setWorkingDirectory(str(self.global_vars.write_dir))
             output_path = "../TMP"
             self.log.debug(f"Relative output path for LaTeX: {output_path}")
-            program = global_vars.tinitex_binary
+            program = self.global_vars.tinitex_binary
             program_exists = program.exists()
             if not program_exists:
                 self.log.error(f"Program not found: {program}")
@@ -1217,7 +1233,7 @@ class CaseBriefApp(Logged, QMainWindow):
                 f"--output-dir={output_path}",
                 "--pdf-engine=pdflatex",  # or xelatex/lualatex
                 "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
-                f"{global_vars.master_dst_tex}",
+                f"{self.global_vars.master_dst_tex}",
             ]
             process.setProgram(str(program))
             process.setArguments(args)
@@ -1234,20 +1250,20 @@ class CaseBriefApp(Logged, QMainWindow):
                 return
             else:
                 self.log.info("LaTeX compilation succeeded.")
-                clean_dir(str(global_vars.tmp_dir))
+                clean_dir(str(self.global_vars.tmp_dir))
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
             return
         QMessageBox.information(
             self,
             "PDF Rendered",
-            f"PDF for {global_vars.master_dst_tex.stem} has been generated successfully.",
+            f"PDF for {self.global_vars.master_dst_tex.stem} has been generated successfully.",
         )
         self.log.info(f"Moving PDF to Downloads folder")
         shutil.move(
-            global_vars.tmp_dir / f"{global_vars.master_dst_tex.stem}.pdf",
+            self.global_vars.tmp_dir / f"{self.global_vars.master_dst_tex.stem}.pdf",
             os.path.join(
-                Path.home(), "Downloads", f"{global_vars.master_dst_tex.stem}.pdf"
+                Path.home(), "Downloads", f"{self.global_vars.master_dst_tex.stem}.pdf"
             ),
         )
         # Here you would typically call the method to generate the PDF
@@ -1255,5 +1271,5 @@ class CaseBriefApp(Logged, QMainWindow):
     def open_settings(self):
         # Logic to open the settings window
         self.log.info("Opening settings...")
-        self.settings = SettingsWindow()
+        self.settings = SettingsWindow(self.global_vars, self.super_class)
         self.settings.show()

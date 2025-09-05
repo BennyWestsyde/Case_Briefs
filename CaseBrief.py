@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, TypedDict
+from typing import Any, List, TypedDict
 import os
-from Global_Vars import Global_Vars, global_vars
+from Global_Vars import Global_Vars
 from cleanup import StructuredLogger, clean_dir
 import re
 import sqlite3
@@ -63,7 +63,8 @@ SQLiteValue = Union[str, int, float, bytes, None]
 class SQL(Logged):
     """A class to handle interaction with the database."""
 
-    def __init__(self, config: Global_Vars):
+    def __init__(self, config: Global_Vars, case_briefs: Any):
+        self.super_class = case_briefs
         super().__init__(
             self.__class__.__name__, str(config.write_dir / "CaseBriefs.self.log")
         )
@@ -346,6 +347,7 @@ class SQL(Logged):
             reasoning=cur_case[9],
             label=Label(cur_case[10]),
             notes=cur_case[11],
+            super_class=self.super_class,
         )
         return case_brief
 
@@ -424,7 +426,8 @@ class SQL(Logged):
 class Latex(Logged):
     """A class to handle LaTeX document generation."""
 
-    def __init__(self, config: Global_Vars):
+    def __init__(self, config: Global_Vars, case_briefs: Any):
+        self.super_class = case_briefs
         super().__init__(
             self.__class__.__name__, str(config.write_dir / "CaseBriefs.self.log")
         )
@@ -445,7 +448,7 @@ class Latex(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         opinions_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            lambda m: self.super_class.sql.cite_case_brief(m.group(1)),
             opinions_str,
         )
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
@@ -454,19 +457,19 @@ class Latex(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         facts_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            lambda m: self.super_class.sql.cite_case_brief(m.group(1)),
             facts_str,
         )
         procedure_str = tex_escape(brief.procedure)
         procedure_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            lambda m: self.super_class.sql.cite_case_brief(m.group(1)),
             procedure_str,
         )
         issue_str = tex_escape(brief.issue)
         issue_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            lambda m: self.super_class.sql.cite_case_brief(m.group(1)),
             issue_str,
         )
         holding_str = tex_escape(brief.holding)
@@ -477,7 +480,7 @@ class Latex(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(m.group(1)),
+            lambda m: self.super_class.sql.cite_case_brief(m.group(1)),
             notes_str,
         )
 
@@ -587,6 +590,7 @@ class Latex(Logged):
             opinions=opinions,
             label=label,
             notes=notes,
+            super_class=self.super_class,
         )
 
     def saveBrief(self, brief: "CaseBrief") -> Path:
@@ -778,6 +782,7 @@ class CaseBrief(Logged):
         opinions: list[Opinion],
         label: Label,
         notes: str,
+        super_class: Any,
     ):
         self.global_vars = config
         super().__init__(
@@ -797,6 +802,7 @@ class CaseBrief(Logged):
         self.opinions = opinions
         self.label = label
         self.notes = notes
+        self.super_class = super_class
 
     @property
     def title(self) -> str:
@@ -886,7 +892,7 @@ class CaseBrief(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         opinions_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(str(m.group(1))),
+            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
             opinions_str,
         )
         # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
@@ -895,19 +901,19 @@ class CaseBrief(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         facts_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(str(m.group(1))),
+            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
             facts_str,
         )
         procedure_str = tex_escape(self.procedure)
         procedure_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(str(m.group(1))),
+            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
             procedure_str,
         )
         issue_str = tex_escape(self.issue)
         issue_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(str(m.group(1))),
+            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
             issue_str,
         )
         principle_str = tex_escape(self.principle)
@@ -917,7 +923,7 @@ class CaseBrief(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: case_briefs.sql.cite_case_brief(str(str(m.group(1)))),
+            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
             notes_str,
         )
 
@@ -1071,7 +1077,7 @@ class CaseBrief(Logged):
     def compile_to_pdf(self) -> str | None:
         """Compile the LaTeX file to PDF."""
         tex_file = strict_path(self.global_vars.cases_dir) / f"{self.filename}.tex"
-        case_briefs.latex.saveBrief(self)
+        self.super_class.latex.saveBrief(self)
         pdf_file = self.get_pdf_path()
         if os.path.exists(pdf_file):
             os.remove(pdf_file)
@@ -1255,8 +1261,8 @@ class CaseBriefs(Logged):
         )
         self.global_vars: Global_Vars = config
         self.case_briefs: list[CaseBrief] = []
-        self.sql = SQL(self.global_vars)
-        self.latex = Latex(self.global_vars)
+        self.sql = SQL(self.global_vars, self)
+        self.latex = Latex(self.global_vars, self)
 
     @property
     def subjects(self) -> list[Subject]:
@@ -1303,5 +1309,4 @@ class CaseBriefs(Logged):
         return sorted(self.case_briefs, key=lambda cb: cb.label.text)
 
 
-global case_briefs
-case_briefs = CaseBriefs(global_vars)
+# case_briefs = CaseBriefs(global_vars)

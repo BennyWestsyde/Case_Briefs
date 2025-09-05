@@ -23,20 +23,9 @@ The resulting Latex document will be assembled as such:
 \\end{document}
 """
 
+from Global_Vars import Global_Vars
 from logger import StructuredLogger
-from CaseBrief import global_vars
-
-log = StructuredLogger(
-    "Main",
-    "TRACE",
-    str(global_vars.write_dir / "CaseBriefs.log"),
-    True,
-    None,
-    True,
-    True,
-)
-
-log.info("Starting Case Briefs Application")
+from CaseBrief import CaseBriefs
 import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
@@ -47,15 +36,28 @@ from GUI import CaseBriefInit, CaseBriefApp
 
 if __name__ == "__main__":
     # Create a simple gui for the application
+    global_vars = Global_Vars()
+    log = StructuredLogger(
+        "Main",
+        "TRACE",
+        str(global_vars.write_dir / "CaseBriefs.log"),
+        True,
+        None,
+        True,
+        True,
+    )
+
+    log.info("Starting Case Briefs Application")
+    case_briefs = CaseBriefs(global_vars)
     app: QApplication = QApplication(sys.argv)
     app.setWindowIcon(QIcon("ui/text.book.closed.png"))
-    init_window: CaseBriefInit = CaseBriefInit()
+    init_window: CaseBriefInit = CaseBriefInit(global_vars, case_briefs)
     init_window.show()
     if init_window.initializer.complete:
         log.info("Initialization complete, launching main application")
     while init_window.isVisible():
         app.processEvents()
-    app_window: CaseBriefApp = CaseBriefApp()
+    app_window: CaseBriefApp = CaseBriefApp(global_vars, case_briefs)
     app_window.show()
     sys.exit(app.exec())
 else:

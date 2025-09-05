@@ -283,7 +283,3 @@ class Global_Vars:
                     own_dict[key] = str(own_dict[key])
             json.dump(own_dict, f, indent=4)
             self.log.debug(f"Saved global variables to {relative_path}")
-
-
-global global_vars
-global_vars = Global_Vars()
