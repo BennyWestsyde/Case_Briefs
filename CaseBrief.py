@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, TypedDict
 import os
@@ -321,16 +322,13 @@ class SQL(Logged):
             (case_label,),
         )
         opinions = [
-            Opinion(opinion[0], opinion[1], config=self.global_vars)
-            for opinion in self.cursor.fetchall()
+            Opinion(opinion[0], opinion[1]) for opinion in self.cursor.fetchall()
         ]
         self.execute(
             "SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?",
             (case_label,),
         )
-        subjects = [
-            Subject(subject[-1], self.global_vars) for subject in self.cursor.fetchall()
-        ]
+        subjects = [Subject(subject[-1]) for subject in self.cursor.fetchall()]
         # Assuming the database schema matches the order of fields in CaseBrief
         case_brief = CaseBrief(
             config=self.global_vars,
@@ -346,7 +344,7 @@ class SQL(Logged):
             holding=cur_case[7],
             principle=cur_case[8],
             reasoning=cur_case[9],
-            label=Label(cur_case[10], self.global_vars),
+            label=Label(cur_case[10]),
             notes=cur_case[11],
         )
         return case_brief
@@ -528,9 +526,7 @@ class Latex(Logged):
         match = re.search(regex, tex_content, re.DOTALL)
         if match:
             subjects = [
-                Subject(s.strip(), self.global_vars)
-                for s in match.group(1).split(",")
-                if s.strip()
+                Subject(s.strip()) for s in match.group(1).split(",") if s.strip()
             ]
             plaintiff = tex_unescape(match.group(2).strip())
             defendant = tex_unescape(match.group(3).strip())
@@ -559,16 +555,14 @@ class Latex(Logged):
             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
             opinions = [
                 Opinion(
-                    o.strip().split(":")[0].strip(),
-                    o.strip().split(":")[1].strip(),
-                    self.global_vars,
+                    o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()
                 )
                 for o in re.sub(
                     citation_regex, r"CITE(\1)", tex_unescape(match.group(12))
                 )
                 if o.strip()
             ]
-            label = Label(match.group(13).strip(), self.global_vars)
+            label = Label(match.group(13).strip())
             notes = tex_unescape(
                 match.group(14).strip()
             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
@@ -680,16 +674,12 @@ class Latex(Logged):
             )
 
 
-class Subject(Logged):
+# Creating a dataclass version of subject
+@dataclass
+class Subject:
     """A class to represent a legal subject."""
 
-    def __init__(self, name: str, config: Global_Vars):
-        self.global_vars = config
-        super().__init__(
-            self.__class__.__name__,
-            str(self.global_vars.write_dir / "CaseBriefs.self.log"),
-        )
-        self.name = name
+    name: str
 
     def __str__(self) -> str:
         return self.name
@@ -706,16 +696,11 @@ class Subject(Logged):
         return f"Subject(name={self.name})"
 
 
-class Label(Logged):
-    """A class to represent the citable label of a case."""
+@dataclass
+class Label:
+    """A class to represent a citable label for a case."""
 
-    def __init__(self, label: str, config: Global_Vars):
-        self.global_vars = config
-        super().__init__(
-            self.__class__.__name__,
-            str(self.global_vars.write_dir / "CaseBriefs.self.log"),
-        )
-        self.text = label
+    text: str
 
     def __str__(self) -> str:
         return self.text
@@ -732,20 +717,26 @@ class Label(Logged):
         return f"Label(label={self.text})"
 
 
-class Opinion(Logged):
+@dataclass
+class Opinion:
     """A class to represent a court opinion."""
 
-    def __init__(self, author: str, text: str, config: Global_Vars):
-        self.global_vars = config
-        super().__init__(
-            self.__class__.__name__,
-            str(self.global_vars.write_dir / "CaseBriefs.self.log"),
-        )
-        self.author = author
-        self.text = text
+    author: str
+    text: str
 
     def __str__(self) -> str:
         return f"{self.author}: {self.text}\n"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Opinion):
+            return self.author == other.author and self.text == other.text
+        elif isinstance(other, str):
+            return str(self) == other
+        else:
+            return False
+
+    def __repr__(self) -> str:
+        return f"Opinion(author={self.author}, text={self.text})"
 
 
 class CaseBrief(Logged):

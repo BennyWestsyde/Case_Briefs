@@ -217,7 +217,7 @@ class CaseBriefCreator(Logged, QWidget):
         case_briefs.reload_cases_sql()
 
         subjects: list[Subject] = [
-            Subject(sub, global_vars) for sub in case_briefs.sql.fetchCaseSubjects()
+            Subject(sub) for sub in case_briefs.sql.fetchCaseSubjects()
         ]
 
         # labels = reload_labels(case_briefs.get_case_briefs())
@@ -480,11 +480,11 @@ class CaseBriefCreator(Logged, QWidget):
             for line in opinions_str.splitlines():
                 if ":" in line:
                     person, text = line.split(":", 1)
-                    opinions.append(Opinion(person.strip(), text.strip(), global_vars))
+                    opinions.append(Opinion(person.strip(), text.strip()))
 
         case_brief = CaseBrief(
             config=global_vars,
-            subject=[Subject(s, global_vars) for s in subjects],
+            subject=[Subject(s) for s in subjects],
             plaintiff=plaintiff,
             defendant=defendant,
             citation=citation,
@@ -496,7 +496,7 @@ class CaseBriefCreator(Logged, QWidget):
             principle=principle,
             reasoning=reasoning,
             opinions=opinions,
-            label=Label(label, global_vars),
+            label=Label(label),
             notes=notes,
         )
 
@@ -733,12 +733,12 @@ class CaseBriefManager(Logged, QWidget):
             for opinion in opinions_str.split(","):
                 if ":" in opinion:
                     person, text = opinion.split(":", 1)
-                    opinions.append(Opinion(person.strip(), text.strip(), global_vars))
+                    opinions.append(Opinion(person.strip(), text.strip()))
         case_brief.update_plaintiff(plaintiff)
         case_brief.update_defendant(defendant)
         case_brief.update_citation(citation)
         case_brief.course = self.creator.class_selector.currentText()
-        case_brief.subjects = [Subject(s, global_vars) for s in subjects]
+        case_brief.subjects = [Subject(s) for s in subjects]
         case_brief.update_facts(facts)
         case_brief.update_procedure(procedure)
         case_brief.update_issue(issue)
