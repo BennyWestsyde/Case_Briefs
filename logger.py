@@ -479,7 +479,7 @@ class Logged:
             True,
             True,
         )
-        self.log.info(f"Initialized logger for {class_name}")
+        self.log.trace(f"Initialized logger for {class_name}")
 
 
 # ----- Minimal demo -----

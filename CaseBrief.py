@@ -66,7 +66,7 @@ class SQL(Logged):
     def __init__(self, config: Global_Vars, case_briefs: Any):
         self.super_class = case_briefs
         super().__init__(
-            self.__class__.__name__, str(config.write_dir / "CaseBriefs.self.log")
+            self.__class__.__name__, str(config.write_dir / "CaseBriefs.log")
         )
         self.global_vars = config
         self.db_path = self.global_vars.sql_dst_file
@@ -429,7 +429,7 @@ class Latex(Logged):
     def __init__(self, config: Global_Vars, case_briefs: Any):
         self.super_class = case_briefs
         super().__init__(
-            self.__class__.__name__, str(config.write_dir / "CaseBriefs.self.log")
+            self.__class__.__name__, str(config.write_dir / "CaseBriefs.log")
         )
         self.global_vars = config
         self.engine_path: Path = self.global_vars.tinitex_binary
@@ -668,7 +668,7 @@ class Latex(Logged):
                     f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
                 )
             else:
-                clean_dir(str(self.tex_dir))
+                clean_dir(self.tex_dir)
             self.log.info(f"Compiled {tex_file} to {pdf_file}")
             return pdf_file
         except Exception as e:
@@ -1108,7 +1108,7 @@ class CaseBrief(Logged):
                 self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
                 return None
             else:
-                clean_dir(str(self.global_vars.cases_dir))
+                clean_dir(self.global_vars.cases_dir)
             self.log.info(f"Compiled {tex_file} to {pdf_file}")
             process.setWorkingDirectory(cwd)
             return pdf_file
@@ -1117,133 +1117,6 @@ class CaseBrief(Logged):
             raise RuntimeError(
                 f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
             )
-
-    # @staticmethod
-    # def load_from_file(filename: str) -> "CaseBrief":
-    #     """Load a case brief from a LaTeX file."""
-    #     log = StructuredLogger("CaseBriefs", "TRACE", None, True, None, True, True)
-    #     log.debug(f"Loading case brief from {filename}")
-    #     with open(filename, "r") as f:
-    #         content = f.read()
-    #         # Here you would parse the content to extract the case brief details
-    #         # This is a placeholder implementation
-    #         regex = r"\\NewBrief{subject=\{(.*?)\},\n\s*plaintiff=\{(.*?)\},\n\s*defendant=\{(.*?)\},\n\s*citation=\{(.*?)\},\n\s*course=\{(.*?)\},\n\s*facts=\{(.*?)\},\n\s*procedure=\{(.*?)\},\n\s*issue=\{(.*?)\},\n\s*holding=\{(.*?)\},\n\s*principle=\{(.*?)\},\n\s*reasoning=\{(.*?)\},\n\s*opinions=\{(.*?)\},\n\s*label=\{case:(.*?)\},\n\s*notes=\{(.*?)\}"
-    #         match = re.search(regex, content, re.DOTALL)
-    #         if match:
-    #             subjects = [
-    #                 Subject(s.strip()) for s in match.group(1).split(",") if s.strip()
-    #             ]
-    #             plaintiff = match.group(2).strip()
-    #             defendant = match.group(3).strip()
-    #             citation = tex_unescape(match.group(4).strip())
-    #             course = match.group(5).strip()
-    #             facts = tex_unescape(
-    #                 match.group(6).strip()
-    #             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-    #             # Regex replace existing citations with the CITE(\1)
-    #             citation_regex = r"\\hyperref\[case:(.*?)\]\{\\textit\{(.*?)\}\}"
-    #             facts = re.sub(citation_regex, r"CITE(\1)", facts)
-    #             procedure = tex_unescape(
-    #                 match.group(7).strip()
-    #             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-    #             # Regex replace existing citations with the CITE(\1)
-    #             procedure = re.sub(citation_regex, r"CITE(\1)", procedure)
-    #             issue = tex_unescape(
-    #                 match.group(8).strip()
-    #             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-    #             # Regex replace existing citations with the CITE(\1)
-    #             issue = re.sub(citation_regex, r"CITE(\1)", issue)
-    #             holding = match.group(9).strip()
-    #             principle = tex_unescape(match.group(10).strip())
-    #             reasoning = tex_unescape(
-    #                 match.group(11).strip()
-    #             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-    #             opinions = [
-    #                 Opinion(
-    #                     o.strip().split(":")[0].strip(), o.strip().split(":")[1].strip()
-    #                 )
-    #                 for o in re.sub(
-    #                     citation_regex, r"CITE(\1)", tex_unescape(match.group(12))
-    #                 )
-    #                 if o.strip()
-    #             ]
-    #             label = Label(match.group(13).strip())
-    #             notes = tex_unescape(
-    #                 match.group(14).strip()
-    #             )  # .replace(r'\\'+'\n', '\n').replace(r"\$", "$")
-    #         else:
-    #             log.error(
-    #                 f"Failed to parse case brief from {filename}. The file may not be in the correct format."
-    #             )
-    #             raise RuntimeError(
-    #                 f"Failed to parse case brief from {filename}. The file may not be in the correct format."
-    #             )
-
-    #         return CaseBrief(
-    #             self.global_vars,
-    #             subjects,
-    #             plaintiff,
-    #             defendant,
-    #             citation,
-    #             course,
-    #             facts,
-    #             procedure,
-    #             issue,
-    #             holding,
-    #             principle,
-    #             reasoning,
-    #             opinions,
-    #             label,
-    #             notes,
-    #         )
-
-    # @staticmethod
-    # def load_from_sql(case_label: str) -> "CaseBrief":
-    #     """Load a case brief from the SQL database by its label."""
-    #     log = StructuredLogger("CaseBriefs", "TRACE", None, True, None, True, True)
-    #     log.debug(f"Loading case brief from SQL with label {case_label}")
-    #     conn = sqlite3.connect(str(global_vars.sql_dst_file))
-    #     conn.execute("PRAGMA foreign_keys = ON")
-    #     curr = conn.cursor()
-    #     curr.execute(
-    #         "SELECT plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, label, notes FROM Cases WHERE label = ?",
-    #         (case_label,),
-    #     )
-    #     cur_case = curr.fetchone()
-    #     if not cur_case:
-    #         log.error(f"No case brief found with label '{case_label}' in the database.")
-    #         raise RuntimeError(
-    #             f"No case brief found with label '{case_label}' in the database."
-    #         )
-    #     curr.execute(
-    #         "SELECT opinion_author, opinion_text FROM CaseOpinionsView WHERE case_label = ?",
-    #         (case_label,),
-    #     )
-    #     opinions = [Opinion(*opinion) for opinion in curr.fetchall()]
-    #     curr.execute(
-    #         "SELECT subject_name FROM CaseSubjectsView WHERE case_label = ?",
-    #         (case_label,),
-    #     )
-    #     subjects = [Subject(subject[-1]) for subject in curr.fetchall()]
-    #     # Assuming the database schema matches the order of fields in CaseBrief
-    #     case_brief = CaseBrief(
-    #         self.global_vars,
-    #         subject=subjects,
-    #         opinions=opinions,
-    #         plaintiff=cur_case[0],
-    #         defendant=cur_case[1],
-    #         citation=cur_case[2],
-    #         course=cur_case[3],
-    #         facts=cur_case[4],
-    #         procedure=cur_case[5],
-    #         issue=cur_case[6],
-    #         holding=cur_case[7],
-    #         principle=cur_case[8],
-    #         reasoning=cur_case[9],
-    #         label=Label(cur_case[10]),
-    #         notes=cur_case[11],
-    #     )
-    #     return case_brief
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, CaseBrief):
@@ -1257,7 +1130,7 @@ class CaseBriefs(Logged):
     def __init__(self, config: Global_Vars):
         """Initialize a CaseBriefs object."""
         super().__init__(
-            self.__class__.__name__, str(config.write_dir / "CaseBriefs.self.log")
+            self.__class__.__name__, str(config.write_dir / "CaseBriefs.log")
         )
         self.global_vars: Global_Vars = config
         self.case_briefs: list[CaseBrief] = []
@@ -1307,6 +1180,3 @@ class CaseBriefs(Logged):
     def get_case_briefs(self) -> list[CaseBrief]:
         """Get all case briefs in the collection."""
         return sorted(self.case_briefs, key=lambda cb: cb.label.text)
-
-
-# case_briefs = CaseBriefs(global_vars)
