@@ -1,0 +1,21 @@
+{
+    "res_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs",
+    "bundle_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs",
+    "write_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs",
+    "tmp_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/TMP",
+    "cases_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/Cases",
+    "cases_output_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/Cases/Output",
+    "tex_src_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/tex_src",
+    "tex_dst_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/tex_src",
+    "master_src_tex": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/tex_src/CaseBriefs.tex",
+    "master_src_sty": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/tex_src/lawbrief.sty",
+    "master_dst_tex": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/tex_src/CaseBriefs.tex",
+    "master_dst_sty": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/tex_src/lawbrief.sty",
+    "sql_src_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/SQL",
+    "sql_dst_dir": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/SQL",
+    "sql_src_file": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/SQL/Cases.sqlite",
+    "sql_dst_file": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/SQL/Cases.sqlite",
+    "sql_create": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/SQL/Create_DB.sql",
+    "backup_location": "/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs/Backup",
+    "tinitex_binary": "."
+}
