@@ -6,6 +6,7 @@ import re
 import shutil
 from PyQt6.QtWidgets import (
     QFileDialog,
+    QProgressDialog,
     QScrollArea,
     QGridLayout,
     QLayoutItem,
@@ -21,7 +22,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QTextEdit,
 )
-from PyQt6.QtCore import QUrl, QProcess, pyqtSlot
+from PyQt6.QtCore import QThread, QUrl, QProcess, Qt, pyqtSlot
 from PyQt6.QtGui import QDesktopServices
 from cleanup import clean_dir
 from typing import Any, Callable
@@ -49,6 +50,39 @@ from typing import Any, Optional, Tuple
 from PyQt6.QtCore import QPoint
 from PyQt6.QtGui import QContextMenuEvent, QTextCursor, QAction
 from PyQt6.QtWidgets import QLineEdit, QMenu, QTextEdit
+
+
+from typing import Optional
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QUrl
+
+
+class CompileToPdfWorker(QObject):
+    finished: pyqtSignal = pyqtSignal(str)  # absolute path to PDF
+    failed: pyqtSignal = pyqtSignal(str)  # error message
+    canceled: pyqtSignal = pyqtSignal()
+
+    def __init__(self, case_brief: CaseBrief) -> None:
+        super().__init__()
+        self._case_brief = case_brief
+
+    @pyqtSlot()
+    def run(self) -> None:
+        try:
+            # If you want to support cancellation, check QThread.currentThread().isInterruptionRequested()
+            pdf_path: Optional[str] = self._case_brief.compile_to_pdf()
+            if not pdf_path:
+                self.failed.emit("LaTeX produced no output path.")
+                return
+            abs_path = os.path.abspath(pdf_path)
+            if not os.path.exists(abs_path):
+                self.failed.emit("PDF not found after compile.")
+                return
+            self.finished.emit(abs_path)
+        except Exception as e:  # keep broad here to ensure we surface errors to UI
+            self.failed.emit(str(e))
 
 
 class SpellCheckHighlighter(QSyntaxHighlighter):
@@ -599,6 +633,7 @@ class CaseBriefManager(Logged, QWidget):
 
         # CaseBriefManager.__init__
         self._pdf_windows: list[QWidget] = []
+        self._threads: list[QThread] = []  # keep strong refs so threads don't get GC’d
 
     @pyqtSlot(CaseBrief)
     def _make_view_handler(self, cb: CaseBrief) -> Callable[[bool], None]:
@@ -614,16 +649,78 @@ class CaseBriefManager(Logged, QWidget):
 
         return _handler
 
-    def view_case_brief(self, case_brief: CaseBrief):
-        """View the PDF of a case brief."""
-        self.log.info(f"Viewing case brief '{case_brief.title}'")
-        pdf_path = case_brief.compile_to_pdf()
-        if not pdf_path or not os.path.exists(pdf_path):
-            QMessageBox.critical(
-                self, "Error", "Failed to compile PDF. Check LaTeX output."
-            )
-            return
-        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
+    def _compile_and_open_async(self, case_brief: CaseBrief) -> None:
+        # Modal progress dialog (indeterminate)
+        dlg = QProgressDialog("Compiling PDF…", "Cancel", 0, 0, self)
+        dlg.setWindowTitle("Please wait")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(True)
+        dlg.setAutoReset(True)
+        dlg.setMinimumDuration(0)  # show immediately
+
+        thread = QThread(self)
+        worker = CompileToPdfWorker(case_brief)
+        worker.moveToThread(thread)
+
+        # Wire up lifecycle
+        thread.started.connect(worker.run)
+
+        def _on_success(path: str) -> None:
+            try:
+                dlg.close()
+                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+            finally:
+                thread.quit()
+
+        def _on_error(msg: str) -> None:
+            try:
+                dlg.close()
+                QMessageBox.critical(self, "Error", f"Failed to compile PDF:\n{msg}")
+            finally:
+                thread.quit()
+
+        worker.finished.connect(_on_success)
+        worker.failed.connect(_on_error)
+
+        # Support user cancel → politely ask the thread to stop; you can poll this in worker if needed
+        def _on_cancel() -> None:
+            thread.requestInterruption()
+            # Optionally emit a canceled signal or just close dialog; we still quit after worker exits.
+            # If your compile call is blocking and can't be interrupted, cancel will just wait to finish.
+
+        dlg.canceled.connect(_on_cancel)
+
+        # Ensure cleanup (and remove strong ref)
+        def _cleanup() -> None:
+            try:
+                self._threads.remove(thread)
+            except ValueError:
+                pass
+            thread.deleteLater()
+            worker.deleteLater()
+
+        thread.finished.connect(_cleanup)
+
+        # Start
+        self._threads.append(thread)
+        dlg.show()
+        thread.start()
+
+    def view_case_brief(self, case_brief: CaseBrief) -> None:
+        """Compile the brief to PDF on a worker thread, then open it."""
+        self.log.info(f"Viewing case brief '{case_brief.title}' (async compile)")
+        self._compile_and_open_async(case_brief)
+
+    # def view_case_brief(self, case_brief: CaseBrief):
+    #     """View the PDF of a case brief."""
+    #     self.log.info(f"Viewing case brief '{case_brief.title}'")
+    #     pdf_path = case_brief.compile_to_pdf()
+    #     if not pdf_path or not os.path.exists(pdf_path):
+    #         QMessageBox.critical(
+    #             self, "Error", "Failed to compile PDF. Check LaTeX output."
+    #         )
+    #         return
+    #     QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
 
     def filter_by_search(self, text: str):
         """Filter the case briefs based on the search text."""
@@ -1250,7 +1347,7 @@ class CaseBriefApp(Logged, QMainWindow):
                 return
             else:
                 self.log.info("LaTeX compilation succeeded.")
-                clean_dir(str(self.global_vars.tmp_dir))
+                clean_dir(self.global_vars.tmp_dir)
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
             return
