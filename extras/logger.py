@@ -28,7 +28,6 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Union, Final
 
-global log
 
 __all__ = [
     "TRACE_LEVEL_NUM",
