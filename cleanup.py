@@ -15,18 +15,18 @@ def clean_dir(path: Path, ignore_dirs: list[Path] = []):
         )
         if os.path.isfile(curr_path):
             log.trace(f"Found file: {curr_relative_print_path}")
-            if file.suffix in (
-                ".aux",
-                ".fdb_latexmk",
-                ".fls",
-                ".idx",
-                ".ilg",
-                ".ind",
-                ".log",
-                ".out",
-                ".synctex.gz",
-                ".synctex(busy)",
-                ".toc",
+            if file.suffixes in (
+                [".aux"],
+                [".fdb_latexmk"],
+                [".fls"],
+                [".idx"],
+                [".ilg"],
+                [".ind"],
+                [".log"],
+                [".out"],
+                [".synctex", ".gz"],
+                [".synctex(busy)"],
+                [".toc"],
             ):
                 log.trace(f"File in glob for deletion")
                 log.debug(f"Removing file: {curr_relative_print_path}")

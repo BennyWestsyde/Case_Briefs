@@ -4,7 +4,7 @@ import threading
 from typing import Any, List, Optional, TypedDict
 import os
 from Global_Vars import Global_Vars
-from cleanup import StructuredLogger, clean_dir
+from logger import StructuredLogger
 import re
 import sqlite3
 from PyQt6.QtCore import QSemaphore, QProcess
@@ -427,8 +427,8 @@ class SQL(Logged):
 class Latex(Logged):
     """A class to handle LaTeX document generation."""
 
-    def __init__(self, config: Global_Vars, case_briefs: Any):
-        self.super_class = case_briefs
+    def __init__(self, config: Global_Vars, case_brief: Any):
+        self.super_class = case_brief
         super().__init__(
             self.__class__.__name__, str(config.write_dir / "CaseBriefs.log")
         )
@@ -481,7 +481,15 @@ class Latex(Logged):
         )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
         notes_str = re.sub(
             r"CITE\((.*?)\)",
-            lambda m: self.super_class.sql.cite_case_brief(m.group(1)),
+            lambda m: (
+                self.super_class.sql.cite_case_brief(m.group(1))
+                if self.super_class.__class__ == CaseBriefs
+                else (
+                    self.super_class.super_class.sql.cite_case_brief(m.group(1))
+                    if self.super_class.__class__ == CaseBrief
+                    else ""
+                )
+            ),
             notes_str,
         )
 
@@ -640,43 +648,138 @@ class Latex(Logged):
                 return False
         return True
 
-    def compile(self, tex_file: Path) -> Path:
-        """Compile a LaTeX file to PDF and return the path to the PDF."""
-        if not tex_file.exists():
-            raise FileNotFoundError(f"LaTeX file {tex_file} does not exist.")
-        pdf_file = self.tex_dir / f"{tex_file.stem}.pdf"
-        if pdf_file.exists():
-            pdf_file.unlink()
+    def compile(
+        self,
+        semaphore: Optional[QSemaphore] = None,
+        cancel: Optional[threading.Event] = None,
+    ) -> str | None:
+        sup: CaseBrief | None = (
+            self.super_class if self.super_class.__class__ == CaseBrief else None
+        )
+        if not sup:
+            self.log.error("No CaseBrief instance to compile.")
+            return None
+        tex_file = strict_path(self.global_vars.cases_dir) / f"{sup.filename}.tex"
+        sup.latex.saveBrief(sup)
+        pdf_file = sup.get_pdf_path()
+
         try:
-            process = QProcess()
-            args: list[str] = [
-                "--output-dir=../TMP",
-                "--pdf-engine=pdflatex",  # or xelatex/lualatex
-                "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
-                str(pdf_file),
-            ]
-            process.setProgram(str(self.engine_path))
-            process.setArguments(args)
-            process.start()
-            process.waitForFinished()
-            if (
-                process.exitStatus() != QProcess.ExitStatus.NormalExit
-                or process.exitCode() != 0
-            ):
-                error_output = process.readAllStandardError().data().decode()
-                self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
-                raise RuntimeError(
-                    f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
-                )
-            else:
-                clean_dir(self.tex_dir)
-            self.log.info(f"Compiled {tex_file} to {pdf_file}")
-            return pdf_file
-        except Exception as e:
-            self.log.error(f"Error compiling {tex_file} to PDF: {e}")
-            raise RuntimeError(
-                f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
+            if os.path.exists(pdf_file):
+                os.remove(pdf_file)
+        except Exception:
+            pass
+
+        process = QProcess()
+        acquired = False
+        try:
+            program = self.global_vars.tinitex_binary
+            if not program.exists():
+                self.log.error(f"TeX program not found: {program}")
+                return None
+
+            process.setWorkingDirectory(str(self.global_vars.cases_dir))
+            relative_output_dir = os.path.relpath(
+                self.global_vars.cases_output_dir, self.global_vars.cases_dir
             )
+
+            # Acquire semaphore (observe cancel)
+            if semaphore is not None:
+                while True:
+                    if cancel is not None and cancel.is_set():
+                        self.log.debug("Cancel before acquire")
+                        return None
+                    if semaphore.tryAcquire(1, 250):
+                        acquired = True
+                        break
+
+            process.setProgram(str(program))
+            process.setArguments([f"--output-dir={relative_output_dir}", str(tex_file)])
+            process.start()
+
+            # Poll for finish (observe cancel)
+            while True:
+                if cancel is not None and cancel.is_set():
+                    try:
+                        process.terminate()
+                        if not process.waitForFinished(1000):
+                            process.kill()
+                            process.waitForFinished(1000)
+                    except Exception:
+                        pass
+                    self.log.debug("Canceled LaTeX process terminated")
+                    return None
+                if process.waitForFinished(200):
+                    break
+
+            if (process.exitStatus() != QProcess.ExitStatus.NormalExit) or (
+                process.exitCode() != 0
+            ):
+                stderr = (
+                    process.readAllStandardError()
+                    .data()
+                    .decode("utf-8", errors="replace")
+                )
+                stdout = (
+                    process.readAllStandardOutput()
+                    .data()
+                    .decode("utf-8", errors="replace")
+                )
+                self.log.error(
+                    f"Error compiling {tex_file}: {stderr or stdout or 'Unknown error'}"
+                )
+                return None
+
+            if not os.path.exists(pdf_file):
+                self.log.error(f"PDF not found after compile: {pdf_file}")
+                return None
+
+            self.log.info(f"Compiled {tex_file} → {pdf_file}")
+            return pdf_file
+
+        finally:
+            if semaphore is not None and acquired:
+                try:
+                    semaphore.release()
+                except Exception:
+                    pass
+
+        #         self, tex_file: Path) -> Path:
+        # """Compile a LaTeX file to PDF and return the path to the PDF."""
+        # if not tex_file.exists():
+        #     raise FileNotFoundError(f"LaTeX file {tex_file} does not exist.")
+        # pdf_file = self.tex_dir / f"{tex_file.stem}.pdf"
+        # if pdf_file.exists():
+        #     pdf_file.unlink()
+        # try:
+        #     process = QProcess()
+        #     args: list[str] = [
+        #         "--output-dir=../TMP",
+        #         "--pdf-engine=pdflatex",  # or xelatex/lualatex
+        #         "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
+        #         str(pdf_file),
+        #     ]
+        #     process.setProgram(str(self.engine_path))
+        #     process.setArguments(args)
+        #     process.start()
+        #     process.waitForFinished()
+        #     if (
+        #         process.exitStatus() != QProcess.ExitStatus.NormalExit
+        #         or process.exitCode() != 0
+        #     ):
+        #         error_output = process.readAllStandardError().data().decode()
+        #         self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
+        #         raise RuntimeError(
+        #             f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
+        #         )
+        #     else:
+        #         clean_dir(self.tex_dir)
+        #     self.log.info(f"Compiled {tex_file} to {pdf_file}")
+        #     return pdf_file
+        # except Exception as e:
+        #     self.log.error(f"Error compiling {tex_file} to PDF: {e}")
+        #     raise RuntimeError(
+        #         f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
+        #     )
 
 
 # Creating a dataclass version of subject
@@ -804,6 +907,7 @@ class CaseBrief(Logged):
         self.label = label
         self.notes = notes
         self.super_class = super_class
+        self.latex = Latex(self.global_vars, self)
 
     @property
     def title(self) -> str:

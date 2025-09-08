@@ -84,7 +84,7 @@ class CompileSingleToPdfWorker(QObject):
     def run(self) -> None:
         try:
             # If you want to support cancellation, check QThread.currentThread().isInterruptionRequested()
-            pdf_path: Optional[str] = self._case_brief.compile_to_pdf()
+            pdf_path: Optional[str] = self._case_brief.latex.compile()
             if not pdf_path:
                 self.failed.emit("LaTeX produced no output path.")
                 return
@@ -670,7 +670,7 @@ class _CompileTask(QRunnable):
             self.signals.error.emit(self.index, "Canceled")
             return
         try:
-            pdf_path: Optional[str] = self.cb.compile_to_pdf(
+            pdf_path: Optional[str] = self.cb.latex.compile(
                 semaphore=self.semaphore,
                 cancel=self.cancel_flag,  # ← crucial
             )
