@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import threading
 from PyQt6.QtWidgets import (
     QFileDialog,
     QProgressDialog,
@@ -22,11 +23,22 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QTextEdit,
 )
-from PyQt6.QtCore import QThread, QUrl, QProcess, Qt, pyqtSlot
+from PyQt6.QtCore import (
+    QMutex,
+    QMutexLocker,
+    QRunnable,
+    QSemaphore,
+    QThread,
+    QThreadPool,
+    QUrl,
+    QProcess,
+    Qt,
+    pyqtSlot,
+)
 from PyQt6.QtGui import QDesktopServices
 from cleanup import clean_dir
-from typing import Any, Callable
-from CaseBrief import CaseBrief, Subject, Label, Opinion, SQL
+from typing import Any, Callable, List
+from CaseBrief import CaseBrief, CaseBriefs, Subject, Label, Opinion, SQL
 
 from logger import Logged
 from Global_Vars import Global_Vars
@@ -59,7 +71,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 
 
-class CompileToPdfWorker(QObject):
+class CompileSingleToPdfWorker(QObject):
     finished: pyqtSignal = pyqtSignal(str)  # absolute path to PDF
     failed: pyqtSignal = pyqtSignal(str)  # error message
     canceled: pyqtSignal = pyqtSignal()
@@ -82,6 +94,82 @@ class CompileToPdfWorker(QObject):
                 return
             self.finished.emit(abs_path)
         except Exception as e:  # keep broad here to ensure we surface errors to UI
+            self.failed.emit(str(e))
+
+
+class RenderAllToPdfWorker(QObject):
+    finished: pyqtSignal = pyqtSignal(str)  # absolute path to PDF
+    failed: pyqtSignal = pyqtSignal(str)  # error message
+    canceled: pyqtSignal = pyqtSignal()
+
+    def __init__(self, case_briefs: CaseBriefs, output_path: str) -> None:
+        super().__init__()
+        self._case_briefs = case_briefs
+        self._output_path = output_path
+
+    @pyqtSlot()
+    def run(self) -> None:
+        try:
+            if not getattr(self._case_briefs, "case_briefs", []):
+                self.failed.emit("No case briefs to compile.")
+                return
+
+            process = QProcess()
+            # run in the write_dir, same as before
+            process.setWorkingDirectory(str(self._case_briefs.global_vars.write_dir))
+
+            # ⬅️ ensure we actually write into TMP (old behavior)
+            output_path = Path() / ".." / "TMP"
+
+            program = self._case_briefs.global_vars.tinitex_binary
+            if not program.exists():
+                self.failed.emit(f"Program not found: {program}")
+                return
+
+            args = [
+                f"--output-dir={output_path}",
+                "--pdf-engine=pdflatex",
+                "--pdf-engine-opt=-shell-escape",
+                f"{self._case_briefs.global_vars.master_dst_tex}",
+            ]
+            process.setProgram(str(program))
+            process.setArguments(args)
+            process.start()
+            process.waitForFinished()
+
+            if (
+                process.exitStatus() != QProcess.ExitStatus.NormalExit
+                or process.exitCode() != 0
+            ):
+                # include stdout too, it often has the TeX reason
+                # Use .data() to get a bytes object from QByteArray (avoids pyright error)
+                stderr = (
+                    process.readAllStandardError()
+                    .data()
+                    .decode("utf-8", errors="replace")
+                )
+                stdout = (
+                    process.readAllStandardOutput()
+                    .data()
+                    .decode("utf-8", errors="replace")
+                )
+                self.failed.emit(f"LaTeX compilation failed:\n{stderr or stdout}")
+                return
+
+            # emit the path to the compiled PDF in TMP (same base name as master .tex)
+
+            pdf_path = (
+                self._case_briefs.global_vars.tmp_dir
+                / f"{self._case_briefs.global_vars.master_dst_tex.stem}.pdf"
+            )
+            if not pdf_path.exists():
+                self.failed.emit("PDF not found after compile.")
+                return
+
+            # ⬅️ do NOT clean here; let the UI handler move+clean like the old flow
+            self.finished.emit(str(pdf_path))
+
+        except Exception as e:
             self.failed.emit(str(e))
 
 
@@ -556,6 +644,151 @@ class CaseBriefCreator(Logged, QWidget):
         self.log.info("Case brief creation window opened")
 
 
+class _TaskSignals(QObject):
+    done = pyqtSignal(int, str)  # (index, abs_pdf_path)
+    error = pyqtSignal(int, str)  # (index, message)
+
+
+class _CompileTask(QRunnable):
+    def __init__(
+        self,
+        index: int,
+        cb: CaseBrief,
+        cancel_flag: threading.Event,
+        semaphore: Optional[QSemaphore] = None,
+    ):
+        super().__init__()
+        self.index = index
+        self.cb = cb
+        self.cancel_flag = cancel_flag
+        self.signals = _TaskSignals()
+        self.semaphore = semaphore
+
+    @pyqtSlot()
+    def run(self) -> None:
+        if self.cancel_flag.is_set():
+            self.signals.error.emit(self.index, "Canceled")
+            return
+        try:
+            pdf_path: Optional[str] = self.cb.compile_to_pdf(
+                semaphore=self.semaphore,
+                cancel=self.cancel_flag,  # ← crucial
+            )
+
+            if self.cancel_flag.is_set():
+                self.signals.error.emit(self.index, "Canceled")
+                return
+            if not pdf_path:
+                self.signals.error.emit(
+                    self.index,
+                    f"LaTeX produced no output path for {self.cb.label.text}.",
+                )
+                return
+            abs_path = os.path.abspath(pdf_path)
+            if not os.path.exists(abs_path):
+                self.signals.error.emit(
+                    self.index, f"PDF not found after compile for {self.cb.label.text}."
+                )
+                return
+            self.signals.done.emit(self.index, abs_path)
+        except Exception as e:
+            self.signals.error.emit(self.index, str(e))
+
+
+class CompileAllToPdfWorker(QObject):
+    finished = pyqtSignal(list)  # list[str] absolute paths
+    failed = pyqtSignal(str)  # first fatal error
+    canceled = pyqtSignal()
+    progress = pyqtSignal(int)  # 0..100
+
+    def __init__(
+        self,
+        case_briefs: CaseBriefs,
+        *,
+        max_workers: Optional[int] = 8,
+        stop_on_error: bool = True,
+    ):
+        super().__init__()
+        self._case_briefs = case_briefs
+        self._pool = QThreadPool.globalInstance()
+        if self._pool is None:
+            raise RuntimeError("QThreadPool.globalInstance() returned None")
+        # Bound the pool; if None, Qt uses a heuristic; you can also do: min(os.cpu_count() or 2, 4)
+        if max_workers is not None:
+            self._pool.setMaxThreadCount(max_workers)
+        self._stop_on_error = stop_on_error
+        self._cancel_flag = threading.Event()
+
+        # Shared state
+        self._mutex = (
+            QSemaphore(max_workers // 2) if max_workers and max_workers > 1 else None
+        )
+        self._mutex2 = QMutex()
+        self._total = len(self._case_briefs.get_case_briefs())
+        self._done_count = 0
+        self._results: List[Optional[str]] = [None] * self._total
+        self._failed_already = False
+
+    @pyqtSlot()
+    def run(self) -> None:
+        briefs = self._case_briefs.get_case_briefs()
+        if not briefs:
+            self.failed.emit("No case briefs to compile.")
+            return
+
+        # Schedule all tasks
+        for i, cb in enumerate(briefs):
+            task = _CompileTask(i, cb, self._cancel_flag)
+            task.signals.done.connect(self._on_task_done)
+            task.signals.error.connect(self._on_task_error)
+            if self._pool is None:
+                self.failed.emit("QThreadPool.globalInstance() returned None")
+                return
+            self._pool.start(task)
+        if self._total == 0:
+            # Edge case: no tasks
+            self.finished.emit([])
+        else:
+            self.progress.emit(0)
+
+    @pyqtSlot(int, str)
+    def _on_task_done(self, idx: int, path: str) -> None:
+        with QMutexLocker(self._mutex2):
+            if self._failed_already or self._cancel_flag.is_set():
+                return
+            self._results[idx] = path
+            self._done_count += 1
+            self.progress.emit(self._done_count)
+            if self._done_count == self._total:
+                # All succeeded
+                self.finished.emit([p for p in self._results if p is not None])
+
+    @pyqtSlot(int, str)
+    def _on_task_error(self, idx: int, message: str) -> None:
+        with QMutexLocker(self._mutex2):
+            if self._failed_already:
+                return
+            if message == "Canceled":
+                # A task noticed cancellation; if every task reports cancel, you could decide what to emit.
+                # For simplicity, treat first cancel as a global cancel.
+                self._failed_already = True
+                self._cancel_flag.set()
+                self.canceled.emit()
+                return
+
+            # A real error occurred
+            self._failed_already = True
+            if self._stop_on_error:
+                # Stop launching further work (already launched tasks will finish).
+                self._cancel_flag.set()
+            self.failed.emit(f"[{idx}] {message}")
+
+    @pyqtSlot()
+    def cancel(self) -> None:
+        # Public API for your UI to request cancel
+        self._cancel_flag.set()
+
+
 class CaseBriefManager(Logged, QWidget):
     """A window for managing existing case briefs.
     This window should bring up a list of the existing case briefs,
@@ -624,6 +857,14 @@ class CaseBriefManager(Logged, QWidget):
             content_layout.addWidget(case_brief_item, index + 1, 0)
             content_layout.addWidget(case_brief_edit_button, index + 1, 1)
             content_layout.addWidget(case_brief_view_button, index + 1, 2)
+
+        view_all_button = QPushButton("View All Case Briefs")
+        view_all_button.clicked.connect(
+            lambda: self.view_all_case_briefs(self.super_class)
+        )  # pyright: ignore[reportUnknownLambdaType, reportUnknownMemberType]
+        content_layout.addWidget(
+            view_all_button, len(case_briefs.get_case_briefs()) + 1, 0, 1, 3
+        )  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
         self.setWindowTitle("Case Briefs Manager")
 
         # self.setLayout(layout)
@@ -659,7 +900,7 @@ class CaseBriefManager(Logged, QWidget):
         dlg.setMinimumDuration(0)  # show immediately
 
         thread = QThread(self)
-        worker = CompileToPdfWorker(case_brief)
+        worker = CompileSingleToPdfWorker(case_brief)
         worker.moveToThread(thread)
 
         # Wire up lifecycle
@@ -711,16 +952,87 @@ class CaseBriefManager(Logged, QWidget):
         self.log.info(f"Viewing case brief '{case_brief.title}' (async compile)")
         self._compile_and_open_async(case_brief)
 
-    # def view_case_brief(self, case_brief: CaseBrief):
-    #     """View the PDF of a case brief."""
-    #     self.log.info(f"Viewing case brief '{case_brief.title}'")
-    #     pdf_path = case_brief.compile_to_pdf()
-    #     if not pdf_path or not os.path.exists(pdf_path):
-    #         QMessageBox.critical(
-    #             self, "Error", "Failed to compile PDF. Check LaTeX output."
-    #         )
-    #         return
-    #     QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(pdf_path)))
+    def _compile_and_open_all_async(self, case_briefs: CaseBriefs) -> None:
+        dlg = QProgressDialog(
+            "Compiling all case briefs…",
+            "Cancel",
+            0,
+            len(case_briefs.get_case_briefs()),
+            self,
+        )
+        dlg.setWindowTitle("Please wait")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(True)
+        dlg.setAutoReset(True)
+        dlg.setMinimumDuration(0)
+        dlg.setValue(0)
+        dlg.show()
+
+        # Worker + thread
+        thread = QThread(self)
+        worker = CompileAllToPdfWorker(
+            self.super_class,
+            max_workers=min((os.cpu_count() or 2), 4),
+            stop_on_error=True,
+        )
+        worker.moveToThread(thread)
+
+        # Wire
+        thread.started.connect(worker.run)
+        dlg.canceled.connect(worker.cancel)
+
+        worker.progress.connect(dlg.setValue)
+
+        def _on_failed(msg: str) -> None:
+            try:
+                dlg.close()
+                QMessageBox.critical(self, "Batch Compile Failed", msg)
+            except Exception as e:
+                self.log.error(f"Error showing batch compile failed dialog: {e}")
+
+        worker.failed.connect(_on_failed)
+
+        def _on_canceled() -> None:
+            try:
+                dlg.close()
+                QMessageBox.information(
+                    self, "Batch Compile Canceled", "Batch compilation was canceled."
+                )
+            except Exception as e:
+                self.log.error(f"Error showing batch compile canceled dialog: {e}")
+
+        worker.canceled.connect(_on_canceled)
+
+        def _on_finished(paths: list[str]) -> None:
+            try:
+                dlg.close()
+                QMessageBox.information(
+                    self,
+                    "Batch Compile Finished",
+                    f"Successfully compiled {len(paths)} PDFs.",
+                )
+            except Exception as e:
+                self.log.error(f"Error showing batch compile finished dialog: {e}")
+
+        worker.finished.connect(_on_finished)
+
+        # Cleanup thread/worker
+        def _cleanup():
+            thread.quit()
+            thread.wait()
+            worker.deleteLater()
+            thread.deleteLater()
+
+        worker.failed.connect(_cleanup)
+        worker.canceled.connect(_cleanup)
+        worker.finished.connect(_cleanup)
+
+        thread.start()
+
+    def view_all_case_briefs(self, case_briefs: CaseBriefs) -> None:
+        """Compile all briefs to a single PDF on a worker thread, then open it."""
+        self.log.info(f"Viewing all case briefs (async compile)")
+        self._compile_and_open_all_async(case_briefs)
 
     def filter_by_search(self, text: str):
         """Filter the case briefs based on the search text."""
@@ -1299,6 +1611,8 @@ class CaseBriefApp(Logged, QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
         self.setWindowTitle("Case Briefs App")
+        # after super().__init__(...)
+        self._threads: list[QThread] = []  # keep strong refs so threads don't get GC’d
 
     def create_case_brief(self):
         # Logic to create a new case brief
@@ -1312,58 +1626,150 @@ class CaseBriefApp(Logged, QMainWindow):
         self.manager = CaseBriefManager(self.global_vars, self.super_class)
         self.manager.show()
 
+    def _render_and_open_async(self) -> None:
+        dlg = QProgressDialog("Rendering PDF…", "Cancel", 0, 0, self)
+        dlg.setWindowTitle("Please wait")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(True)
+        dlg.setAutoReset(True)
+        dlg.setMinimumDuration(0)
+        dlg.show()
+
+        thread = QThread(self)
+        worker = RenderAllToPdfWorker(self.super_class, str(self.global_vars.tmp_dir))
+        worker.moveToThread(thread)
+
+        thread.started.connect(worker.run)
+
+        def _on_success(tmp_pdf_path: str) -> None:
+            try:
+                dlg.close()
+
+                # Mirror old behavior: message → move → open → clean TMP
+                stem = self.global_vars.master_dst_tex.stem
+                downloads_dir = Path.home() / "Downloads"
+                dest = downloads_dir / f"{stem}.pdf"
+
+                # If a file already exists, replace it
+                if dest.exists():
+                    try:
+                        dest.unlink()
+                    except Exception:
+                        # fallback to overwrite via replace()
+                        pass
+
+                try:
+                    shutil.move(tmp_pdf_path, str(dest))
+                except Exception:
+                    # if move fails across devices, copy & then remove
+                    shutil.copy2(tmp_pdf_path, dest)
+                    try:
+                        Path(tmp_pdf_path).unlink(missing_ok=True)  # py>=3.8
+                    except Exception:
+                        pass
+
+                QMessageBox.information(
+                    self,
+                    "PDF Rendered",
+                    f"PDF for {stem} has been generated successfully.",
+                )
+
+                # Open the **moved** file
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(dest)))
+
+                # Clean TMP like the synchronous version
+                try:
+                    clean_dir(self.global_vars.tmp_dir)
+                except Exception:
+                    # non-fatal: leave TMP alone if cleanup fails
+                    pass
+
+            finally:
+                thread.quit()
+
+        def _on_error(msg: str) -> None:
+            try:
+                dlg.close()
+                QMessageBox.critical(self, "LaTeX Error", msg)
+            finally:
+                thread.quit()
+
+        worker.finished.connect(_on_success)
+        worker.failed.connect(_on_error)
+
+        def _on_cancel() -> None:
+            thread.requestInterruption()
+
+        dlg.canceled.connect(_on_cancel)
+
+        def _cleanup() -> None:
+            try:
+                self._threads.remove(thread)
+            except ValueError:
+                pass
+            thread.deleteLater()
+            worker.deleteLater()
+
+        thread.finished.connect(_cleanup)
+
+        self._threads.append(thread)
+        thread.start()
+
     def render_pdf(self):
-        # Logic to render the case brief as a PDF
+        # # Logic to render the case brief as a PDF
         self.log.info("Rendering PDF for the case brief...")
-        try:
-            process = QProcess(self)
-            process.setWorkingDirectory(str(self.global_vars.write_dir))
-            output_path = "../TMP"
-            self.log.debug(f"Relative output path for LaTeX: {output_path}")
-            program = self.global_vars.tinitex_binary
-            program_exists = program.exists()
-            if not program_exists:
-                self.log.error(f"Program not found: {program}")
-                QMessageBox.critical(self, "Error", f"Program not found: {program}")
-                return
-            args = [
-                f"--output-dir={output_path}",
-                "--pdf-engine=pdflatex",  # or xelatex/lualatex
-                "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
-                f"{self.global_vars.master_dst_tex}",
-            ]
-            process.setProgram(str(program))
-            process.setArguments(args)
-            self.log.debug(f"Running command: {program} {' '.join(args)}")
-            process.start()
-            process.waitForFinished()
-            if (
-                process.exitStatus() != QProcess.ExitStatus.NormalExit
-                or process.exitCode() != 0
-            ):
-                error_output = process.readAllStandardError().data().decode()
-                self.log.error(f"LaTeX compilation failed: {error_output}")
-                QMessageBox.critical(self, "LaTeX Error", error_output)
-                return
-            else:
-                self.log.info("LaTeX compilation succeeded.")
-                clean_dir(self.global_vars.tmp_dir)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-            return
-        QMessageBox.information(
-            self,
-            "PDF Rendered",
-            f"PDF for {self.global_vars.master_dst_tex.stem} has been generated successfully.",
-        )
-        self.log.info(f"Moving PDF to Downloads folder")
-        shutil.move(
-            self.global_vars.tmp_dir / f"{self.global_vars.master_dst_tex.stem}.pdf",
-            os.path.join(
-                Path.home(), "Downloads", f"{self.global_vars.master_dst_tex.stem}.pdf"
-            ),
-        )
-        # Here you would typically call the method to generate the PDF
+        self._render_and_open_async()
+
+        # self.log.info("Rendering PDF for the case brief...")
+        # try:
+        #     process = QProcess(self)
+        #     process.setWorkingDirectory(str(self.global_vars.write_dir))
+        #     output_path = "../TMP"
+        #     self.log.debug(f"Relative output path for LaTeX: {output_path}")
+        #     program = self.global_vars.tinitex_binary
+        #     program_exists = program.exists()
+        #     if not program_exists:
+        #         self.log.error(f"Program not found: {program}")
+        #         QMessageBox.critical(self, "Error", f"Program not found: {program}")
+        #         return
+        #     args = [
+        #         f"--output-dir={output_path}",
+        #         "--pdf-engine=pdflatex",  # or xelatex/lualatex
+        #         "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
+        #         f"{self.global_vars.master_dst_tex}",
+        #     ]
+        #     process.setProgram(str(program))
+        #     process.setArguments(args)
+        #     self.log.debug(f"Running command: {program} {' '.join(args)}")
+        #     process.start()
+        #     process.waitForFinished()
+        #     if (
+        #         process.exitStatus() != QProcess.ExitStatus.NormalExit
+        #         or process.exitCode() != 0
+        #     ):
+        #         error_output = process.readAllStandardError().data().decode()
+        #         self.log.error(f"LaTeX compilation failed: {error_output}")
+        #         QMessageBox.critical(self, "LaTeX Error", error_output)
+        #         return
+        #     else:
+        #         self.log.info("LaTeX compilation succeeded.")
+        #         clean_dir(self.global_vars.tmp_dir)
+        # except Exception as e:
+        #     QMessageBox.critical(self, "Error", str(e))
+        #     return
+        # QMessageBox.information(
+        #     self,
+        #     "PDF Rendered",
+        #     f"PDF for {self.global_vars.master_dst_tex.stem} has been generated successfully.",
+        # )
+        # self.log.info(f"Moving PDF to Downloads folder")
+        # shutil.move(
+        #     self.global_vars.tmp_dir / f"{self.global_vars.master_dst_tex.stem}.pdf",
+        #     os.path.join(
+        #         Path.home(), "Downloads", f"{self.global_vars.master_dst_tex.stem}.pdf"
+        #     ),
+        # )
+        # # Here you would typically call the method to generate the PDF
 
     def open_settings(self):
         # Logic to open the settings window

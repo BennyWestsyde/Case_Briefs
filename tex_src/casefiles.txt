@@ -7,6 +7,7 @@
 ../Cases/Day_V_Caton.tex
 ../Cases/Dickinson_V_Dodds.tex
 ../Cases/Dougherty_V_Stepp.tex
+../Cases/Encompass_Insurance_Co_V_Stone_Mansion_Restaurant,_Inc.tex
 ../Cases/Enright_V_Groves.tex
 ../Cases/Fisher_V_Carrousel_Moter_Hotel,_Inc.tex
 ../Cases/Fujimoto_V_Rio_Grande_Pickle_Co.tex
@@ -34,5 +35,6 @@
 ../Cases/Taylor_V_Vallelunga.tex
 ../Cases/Volker_Court,_LLC_V_Santa_Fe_Apartments,_LCC.tex
 ../Cases/Wagner_V_State.tex
+../Cases/Walker_V_Keith.tex
 ../Cases/Wallace_V_Rosen.tex
 ../Cases/Western_Union_Telegraph_Co_V_Hill.tex

@@ -57,6 +57,7 @@ if __name__ == "__main__":
         log.info("Initialization complete, launching main application")
     while init_window.isVisible():
         app.processEvents()
+    case_briefs.reload_cases_sql()
     app_window: CaseBriefApp = CaseBriefApp(global_vars, case_briefs)
     app_window.show()
     sys.exit(app.exec())

@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, TypedDict
+import threading
+from typing import Any, List, Optional, TypedDict
 import os
 from Global_Vars import Global_Vars
 from cleanup import StructuredLogger, clean_dir
 import re
 import sqlite3
-from PyQt6.QtCore import QProcess
+from PyQt6.QtCore import QSemaphore, QProcess
 
 from logger import Logged
 from pathlib import Path
@@ -649,7 +650,7 @@ class Latex(Logged):
         try:
             process = QProcess()
             args: list[str] = [
-                "--output-dir=./TMP",
+                "--output-dir=../TMP",
                 "--pdf-engine=pdflatex",  # or xelatex/lualatex
                 "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
                 str(pdf_file),
@@ -1074,49 +1075,94 @@ class CaseBrief(Logged):
             f.write(self.to_latex())
         self.log.info(f"Saved Latex to {filename}")
 
-    def compile_to_pdf(self) -> str | None:
-        """Compile the LaTeX file to PDF."""
+    def compile_to_pdf(
+        self,
+        semaphore: Optional[QSemaphore] = None,
+        cancel: Optional[threading.Event] = None,
+    ) -> str | None:
         tex_file = strict_path(self.global_vars.cases_dir) / f"{self.filename}.tex"
         self.super_class.latex.saveBrief(self)
         pdf_file = self.get_pdf_path()
-        if os.path.exists(pdf_file):
-            os.remove(pdf_file)
+
         try:
-            process: QProcess = QProcess()
+            if os.path.exists(pdf_file):
+                os.remove(pdf_file)
+        except Exception:
+            pass
+
+        process = QProcess()
+        acquired = False
+        try:
             program = self.global_vars.tinitex_binary
-            program_exists = program.exists()
-            if not program_exists:
+            if not program.exists():
                 self.log.error(f"TeX program not found: {program}")
                 return None
-            # Determine the relative path from self.global_vars.cases_dir to self.global_vars.cases_output_dir
+
+            process.setWorkingDirectory(str(self.global_vars.cases_dir))
             relative_output_dir = os.path.relpath(
                 self.global_vars.cases_output_dir, self.global_vars.cases_dir
             )
-            cwd = os.getcwd()
-            process.setWorkingDirectory(str(self.global_vars.cases_dir))
-            arguments = [f"--output-dir={relative_output_dir}", str(tex_file)]
-            process.setProgram(str(self.global_vars.tinitex_binary))
-            process.setArguments(arguments)
+
+            # Acquire semaphore (observe cancel)
+            if semaphore is not None:
+                while True:
+                    if cancel is not None and cancel.is_set():
+                        self.log.debug("Cancel before acquire")
+                        return None
+                    if semaphore.tryAcquire(1, 250):
+                        acquired = True
+                        break
+
+            process.setProgram(str(program))
+            process.setArguments([f"--output-dir={relative_output_dir}", str(tex_file)])
             process.start()
-            # process.start("pdflatex", ["-interaction=nonstopmode", "-output-directory=./Cases", tex_file]) # pyright: ignore[reportUnknownMemberType]
-            process.waitForFinished()
-            if (
-                process.exitStatus() != QProcess.ExitStatus.NormalExit
-                or process.exitCode() != 0
+
+            # Poll for finish (observe cancel)
+            while True:
+                if cancel is not None and cancel.is_set():
+                    try:
+                        process.terminate()
+                        if not process.waitForFinished(1000):
+                            process.kill()
+                            process.waitForFinished(1000)
+                    except Exception:
+                        pass
+                    self.log.debug("Canceled LaTeX process terminated")
+                    return None
+                if process.waitForFinished(200):
+                    break
+
+            if (process.exitStatus() != QProcess.ExitStatus.NormalExit) or (
+                process.exitCode() != 0
             ):
-                error_output = process.readAllStandardError().data().decode()
-                self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
+                stderr = (
+                    process.readAllStandardError()
+                    .data()
+                    .decode("utf-8", errors="replace")
+                )
+                stdout = (
+                    process.readAllStandardOutput()
+                    .data()
+                    .decode("utf-8", errors="replace")
+                )
+                self.log.error(
+                    f"Error compiling {tex_file}: {stderr or stdout or 'Unknown error'}"
+                )
                 return None
-            else:
-                clean_dir(self.global_vars.cases_dir)
-            self.log.info(f"Compiled {tex_file} to {pdf_file}")
-            process.setWorkingDirectory(cwd)
+
+            if not os.path.exists(pdf_file):
+                self.log.error(f"PDF not found after compile: {pdf_file}")
+                return None
+
+            self.log.info(f"Compiled {tex_file} → {pdf_file}")
             return pdf_file
-        except Exception as e:
-            self.log.error(f"Error compiling {tex_file} to PDF: {e}")
-            raise RuntimeError(
-                f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
-            )
+
+        finally:
+            if semaphore is not None and acquired:
+                try:
+                    semaphore.release()
+                except Exception:
+                    pass
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, CaseBrief):
