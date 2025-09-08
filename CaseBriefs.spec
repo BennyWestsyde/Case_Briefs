@@ -3,7 +3,7 @@
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
-proj_dir = Path(r"/Users/bennettwestfall/Library/Mobile Documents/com~apple~CloudDocs/the_vault/school_work/2025/Fall/Case_Briefs")
+proj_dir = Path(".").abspath()
 
 # Collect package, binaries, and data for pyspellchecker (imported as 'spellchecker')
 sc_datas, sc_binaries, sc_hidden = collect_all("spellchecker")
