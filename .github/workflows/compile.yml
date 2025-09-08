@@ -82,7 +82,7 @@ jobs:
         run: |
           TAG='${{ inputs.version }}'
           if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
-            echo "Tag ${TAG} exists."
+            echo "Tag ${TAG} exists." >> $GITHUB_OUTPUT
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
