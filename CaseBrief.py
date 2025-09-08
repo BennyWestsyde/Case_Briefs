@@ -743,44 +743,6 @@ class Latex(Logged):
                 except Exception:
                     pass
 
-        #         self, tex_file: Path) -> Path:
-        # """Compile a LaTeX file to PDF and return the path to the PDF."""
-        # if not tex_file.exists():
-        #     raise FileNotFoundError(f"LaTeX file {tex_file} does not exist.")
-        # pdf_file = self.tex_dir / f"{tex_file.stem}.pdf"
-        # if pdf_file.exists():
-        #     pdf_file.unlink()
-        # try:
-        #     process = QProcess()
-        #     args: list[str] = [
-        #         "--output-dir=../TMP",
-        #         "--pdf-engine=pdflatex",  # or xelatex/lualatex
-        #         "--pdf-engine-opt=-shell-escape",  # <-- include the leading dash
-        #         str(pdf_file),
-        #     ]
-        #     process.setProgram(str(self.engine_path))
-        #     process.setArguments(args)
-        #     process.start()
-        #     process.waitForFinished()
-        #     if (
-        #         process.exitStatus() != QProcess.ExitStatus.NormalExit
-        #         or process.exitCode() != 0
-        #     ):
-        #         error_output = process.readAllStandardError().data().decode()
-        #         self.log.error(f"Error compiling {tex_file} to PDF: {error_output}")
-        #         raise RuntimeError(
-        #             f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
-        #         )
-        #     else:
-        #         clean_dir(self.tex_dir)
-        #     self.log.info(f"Compiled {tex_file} to {pdf_file}")
-        #     return pdf_file
-        # except Exception as e:
-        #     self.log.error(f"Error compiling {tex_file} to PDF: {e}")
-        #     raise RuntimeError(
-        #         f"Failed to compile {tex_file} to PDF. Check the LaTeX file for errors."
-        #     )
-
 
 # Creating a dataclass version of subject
 @dataclass
@@ -987,286 +949,288 @@ class CaseBrief(Logged):
             strict_path(self.global_vars.cases_output_dir) / f"{self.filename}.pdf"
         )
 
-    def to_latex(self) -> str:
-        """Generate a LaTeX representation of the case brief."""
-        citation_str = tex_escape(self.citation)
-        subjects_str = ", ".join(str(s) for s in self.subjects)
-        opinions_str = ("\n").join(str(op) for op in self.opinions)
-        opinions_str = tex_escape(
-            opinions_str
-        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
-        opinions_str = re.sub(
-            r"CITE\((.*?)\)",
-            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-            opinions_str,
-        )
-        # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
-        facts_str = tex_escape(
-            self.facts
-        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
-        facts_str = re.sub(
-            r"CITE\((.*?)\)",
-            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-            facts_str,
-        )
-        procedure_str = tex_escape(self.procedure)
-        procedure_str = re.sub(
-            r"CITE\((.*?)\)",
-            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-            procedure_str,
-        )
-        issue_str = tex_escape(self.issue)
-        issue_str = re.sub(
-            r"CITE\((.*?)\)",
-            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-            issue_str,
-        )
-        principle_str = tex_escape(self.principle)
-        reasoning_str = tex_escape(self.reasoning)
-        notes_str = tex_escape(
-            self.notes
-        )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
-        notes_str = re.sub(
-            r"CITE\((.*?)\)",
-            lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-            notes_str,
-        )
+    # def to_latex(self) -> str:
+    #     """Generate a LaTeX representation of the case brief."""
+    #     citation_str = tex_escape(self.citation)
+    #     subjects_str = ", ".join(str(s) for s in self.subjects)
+    #     opinions_str = ("\n").join(str(op) for op in self.opinions)
+    #     opinions_str = tex_escape(
+    #         opinions_str
+    #     )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+    #     opinions_str = re.sub(
+    #         r"CITE\((.*?)\)",
+    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
+    #         opinions_str,
+    #     )
+    #     # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
+    #     facts_str = tex_escape(
+    #         self.facts
+    #     )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+    #     facts_str = re.sub(
+    #         r"CITE\((.*?)\)",
+    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
+    #         facts_str,
+    #     )
+    #     procedure_str = tex_escape(self.procedure)
+    #     procedure_str = re.sub(
+    #         r"CITE\((.*?)\)",
+    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
+    #         procedure_str,
+    #     )
+    #     issue_str = tex_escape(self.issue)
+    #     issue_str = re.sub(
+    #         r"CITE\((.*?)\)",
+    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
+    #         issue_str,
+    #     )
+    #     principle_str = tex_escape(self.principle)
+    #     reasoning_str = tex_escape(self.reasoning)
+    #     notes_str = tex_escape(
+    #         self.notes
+    #     )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
+    #     notes_str = re.sub(
+    #         r"CITE\((.*?)\)",
+    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
+    #         notes_str,
+    #     )
 
-        return """
-            \\documentclass[../tex_src/CaseBriefs.tex]{subfiles}
-            \\usepackage{lawbrief}
-            \\begin{document}
-            \\NewBrief{subject={%s},
-                    plaintiff={%s},
-                    defendant={%s},
-                    citation={%s},
-                    course={%s},
-                    facts={%s},
-                    procedure={%s},
-                    issue={%s},
-                    holding={%s},
-                    principle={%s},
-                    reasoning={%s},
-                    opinions={%s},
-                    label={case:%s},
-                    notes={%s}
-            }
-            \\end{document}
-        """ % (
-            subjects_str,
-            self.plaintiff,
-            self.defendant,
-            citation_str,
-            self.course,
-            facts_str,
-            procedure_str,
-            issue_str,
-            self.holding,
-            principle_str,
-            reasoning_str,
-            opinions_str,
-            self.label,
-            notes_str,
-        )
+    #     return """
+    #         \\documentclass[../tex_src/CaseBriefs.tex]{subfiles}
+    #         \\usepackage{lawbrief}
+    #         \\begin{document}
+    #         \\NewBrief{subject={%s},
+    #                 plaintiff={%s},
+    #                 defendant={%s},
+    #                 citation={%s},
+    #                 course={%s},
+    #                 facts={%s},
+    #                 procedure={%s},
+    #                 issue={%s},
+    #                 holding={%s},
+    #                 principle={%s},
+    #                 reasoning={%s},
+    #                 opinions={%s},
+    #                 label={case:%s},
+    #                 notes={%s}
+    #         }
+    #         \\end{document}
+    #     """ % (
+    #         subjects_str,
+    #         self.plaintiff,
+    #         self.defendant,
+    #         citation_str,
+    #         self.course,
+    #         facts_str,
+    #         procedure_str,
+    #         issue_str,
+    #         self.holding,
+    #         principle_str,
+    #         reasoning_str,
+    #         opinions_str,
+    #         self.label,
+    #         notes_str,
+    #     )
 
-    def to_sql(self) -> None:
-        self.log.debug(f"Saving case brief '{self.label.text}' to SQL database")
-        conn = sqlite3.connect(str(self.global_vars.sql_dst_file))
-        conn.execute("PRAGMA foreign_keys = ON")
-        curr = conn.cursor()
-        try:
-            # Insert or update the main case brief information
-            curr.execute(
-                """
-                INSERT INTO Cases (label, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(label) DO UPDATE SET
-                    plaintiff=excluded.plaintiff,
-                    defendant=excluded.defendant,
-                    citation=excluded.citation,
-                    course=excluded.course,
-                    facts=excluded.facts,
-                    procedure=excluded.procedure,
-                    issue=excluded.issue,
-                    holding=excluded.holding,
-                    principle=excluded.principle,
-                    reasoning=excluded.reasoning,
-                    notes=excluded.notes
-            """,
-                (
-                    self.label.text,
-                    self.plaintiff,
-                    self.defendant,
-                    self.citation,
-                    self.course,
-                    self.facts,
-                    self.procedure,
-                    self.issue,
-                    self.holding,
-                    self.principle,
-                    self.reasoning,
-                    self.notes,
-                ),
-            )
+    # def to_sql(self) -> None:
+    #     self.log.debug(f"Saving case brief '{self.label.text}' to SQL database")
+    #     conn = sqlite3.connect(str(self.global_vars.sql_dst_file))
+    #     conn.execute("PRAGMA foreign_keys = ON")
+    #     curr = conn.cursor()
+    #     try:
+    #         # Insert or update the main case brief information
+    #         curr.execute(
+    #             """
+    #             INSERT INTO Cases (label, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
+    #             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    #             ON CONFLICT(label) DO UPDATE SET
+    #                 plaintiff=excluded.plaintiff,
+    #                 defendant=excluded.defendant,
+    #                 citation=excluded.citation,
+    #                 course=excluded.course,
+    #                 facts=excluded.facts,
+    #                 procedure=excluded.procedure,
+    #                 issue=excluded.issue,
+    #                 holding=excluded.holding,
+    #                 principle=excluded.principle,
+    #                 reasoning=excluded.reasoning,
+    #                 notes=excluded.notes
+    #         """,
+    #             (
+    #                 self.label.text,
+    #                 self.plaintiff,
+    #                 self.defendant,
+    #                 self.citation,
+    #                 self.course,
+    #                 self.facts,
+    #                 self.procedure,
+    #                 self.issue,
+    #                 self.holding,
+    #                 self.principle,
+    #                 self.reasoning,
+    #                 self.notes,
+    #             ),
+    #         )
 
-            # Clear existing subjects and opinions
-            self.log.debug("Deleting existing subjects and opinions")
-            curr.execute(
-                "DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,)
-            )
-            curr.execute(
-                "DELETE FROM CaseOpinions WHERE case_label = ?", (self.label.text,)
-            )
+    #         # Clear existing subjects and opinions
+    #         self.log.debug("Deleting existing subjects and opinions")
+    #         curr.execute(
+    #             "DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,)
+    #         )
+    #         curr.execute(
+    #             "DELETE FROM CaseOpinions WHERE case_label = ?", (self.label.text,)
+    #         )
 
-            # Insert subjects
-            for subject in self.subjects:
-                self.log.trace("Saving Subject: ", subject.name)
-                curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
-                subject_id = curr.fetchone()
-                if not subject_id:
-                    curr.execute(
-                        "INSERT INTO Subjects (name) VALUES (?)", (subject.name,)
-                    )
-                    curr.execute(
-                        "SELECT id FROM Subjects where name = ?", (subject.name,)
-                    )
-                    subject_id = curr.fetchone()
-                subject_id = subject_id[0]
-                curr.execute(
-                    "INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)",
-                    (
-                        self.label.text,
-                        subject_id,
-                    ),
-                )
+    #         # Insert subjects
+    #         for subject in self.subjects:
+    #             self.log.trace("Saving Subject: ", subject.name)
+    #             curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
+    #             subject_id = curr.fetchone()
+    #             if not subject_id:
+    #                 curr.execute(
+    #                     "INSERT INTO Subjects (name) VALUES (?)", (subject.name,)
+    #                 )
+    #                 curr.execute(
+    #                     "SELECT id FROM Subjects where name = ?", (subject.name,)
+    #                 )
+    #                 subject_id = curr.fetchone()
+    #             subject_id = subject_id[0]
+    #             curr.execute(
+    #                 "INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)",
+    #                 (
+    #                     self.label.text,
+    #                     subject_id,
+    #                 ),
+    #             )
 
-            # Insert opinions
-            for opinion in self.opinions:
-                self.log.trace("Saving Opinion By: ", opinion.author)
-                curr.execute(
-                    "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
-                )
-                opinion_id = curr.fetchone()
-                if not opinion_id:
-                    curr.execute(
-                        "INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)",
-                        (
-                            opinion.author,
-                            opinion.text,
-                        ),
-                    )
-                    curr.execute(
-                        "SELECT id FROM Opinions where opinion_text = ?",
-                        (opinion.text,),
-                    )
-                    opinion_id = curr.fetchone()
-                opinion_id = opinion_id[0]
-                curr.execute(
-                    "INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)",
-                    (self.label.text, opinion_id),
-                )
+    #         # Insert opinions
+    #         for opinion in self.opinions:
+    #             self.log.trace("Saving Opinion By: ", opinion.author)
+    #             curr.execute(
+    #                 "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
+    #             )
+    #             opinion_id = curr.fetchone()
+    #             if not opinion_id:
+    #                 curr.execute(
+    #                     "INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)",
+    #                     (
+    #                         opinion.author,
+    #                         opinion.text,
+    #                     ),
+    #                 )
+    #                 curr.execute(
+    #                     "SELECT id FROM Opinions where opinion_text = ?",
+    #                     (opinion.text,),
+    #                 )
+    #                 opinion_id = curr.fetchone()
+    #             opinion_id = opinion_id[0]
+    #             curr.execute(
+    #                 "INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)",
+    #                 (self.label.text, opinion_id),
+    #             )
 
-            conn.commit()
-        except sqlite3.Error as e:
-            conn.rollback()
-            self.log.error(f"Error saving case brief to database: {e}")
-        finally:
-            conn.close()
+    #         conn.commit()
+    #     except sqlite3.Error as e:
+    #         conn.rollback()
+    #         self.log.error(f"Error saving case brief to database: {e}")
+    #     finally:
+    #         conn.close()
 
-    def save_to_file(self, filename: str) -> None:
-        """Save the LaTeX representation of the case brief to a file."""
-        with open(filename, "w") as f:
-            f.write(self.to_latex())
-        self.log.info(f"Saved Latex to {filename}")
+    # def save_to_file(self, filename: str) -> None:
+    #     """Save the LaTeX representation of the case brief to a file."""
+    #     with open(filename, "w") as f:
+    #         f.write(self.to_latex())
+    #     self.log.info(f"Saved Latex to {filename}")
 
-    def compile_to_pdf(
-        self,
-        semaphore: Optional[QSemaphore] = None,
-        cancel: Optional[threading.Event] = None,
-    ) -> str | None:
-        tex_file = strict_path(self.global_vars.cases_dir) / f"{self.filename}.tex"
-        self.super_class.latex.saveBrief(self)
-        pdf_file = self.get_pdf_path()
+    # def compile_to_pdf(
+    #     self,
+    #     semaphore: Optional[QSemaphore] = None,
+    #     cancel: Optional[threading.Event] = None,
+    # ) -> str | None:
+    #     return self.latex.compile(semaphore, cancel)
 
-        try:
-            if os.path.exists(pdf_file):
-                os.remove(pdf_file)
-        except Exception:
-            pass
+    # tex_file = strict_path(self.global_vars.cases_dir) / f"{self.filename}.tex"
+    # self.super_class.latex.saveBrief(self)
+    # pdf_file = self.get_pdf_path()
 
-        process = QProcess()
-        acquired = False
-        try:
-            program = self.global_vars.tinitex_binary
-            if not program.exists():
-                self.log.error(f"TeX program not found: {program}")
-                return None
+    # try:
+    #     if os.path.exists(pdf_file):
+    #         os.remove(pdf_file)
+    # except Exception:
+    #     pass
 
-            process.setWorkingDirectory(str(self.global_vars.cases_dir))
-            relative_output_dir = os.path.relpath(
-                self.global_vars.cases_output_dir, self.global_vars.cases_dir
-            )
+    # process = QProcess()
+    # acquired = False
+    # try:
+    #     program = self.global_vars.tinitex_binary
+    #     if not program.exists():
+    #         self.log.error(f"TeX program not found: {program}")
+    #         return None
 
-            # Acquire semaphore (observe cancel)
-            if semaphore is not None:
-                while True:
-                    if cancel is not None and cancel.is_set():
-                        self.log.debug("Cancel before acquire")
-                        return None
-                    if semaphore.tryAcquire(1, 250):
-                        acquired = True
-                        break
+    #     process.setWorkingDirectory(str(self.global_vars.cases_dir))
+    #     relative_output_dir = os.path.relpath(
+    #         self.global_vars.cases_output_dir, self.global_vars.cases_dir
+    #     )
 
-            process.setProgram(str(program))
-            process.setArguments([f"--output-dir={relative_output_dir}", str(tex_file)])
-            process.start()
+    #     # Acquire semaphore (observe cancel)
+    #     if semaphore is not None:
+    #         while True:
+    #             if cancel is not None and cancel.is_set():
+    #                 self.log.debug("Cancel before acquire")
+    #                 return None
+    #             if semaphore.tryAcquire(1, 250):
+    #                 acquired = True
+    #                 break
 
-            # Poll for finish (observe cancel)
-            while True:
-                if cancel is not None and cancel.is_set():
-                    try:
-                        process.terminate()
-                        if not process.waitForFinished(1000):
-                            process.kill()
-                            process.waitForFinished(1000)
-                    except Exception:
-                        pass
-                    self.log.debug("Canceled LaTeX process terminated")
-                    return None
-                if process.waitForFinished(200):
-                    break
+    #     process.setProgram(str(program))
+    #     process.setArguments([f"--output-dir={relative_output_dir}", str(tex_file)])
+    #     process.start()
 
-            if (process.exitStatus() != QProcess.ExitStatus.NormalExit) or (
-                process.exitCode() != 0
-            ):
-                stderr = (
-                    process.readAllStandardError()
-                    .data()
-                    .decode("utf-8", errors="replace")
-                )
-                stdout = (
-                    process.readAllStandardOutput()
-                    .data()
-                    .decode("utf-8", errors="replace")
-                )
-                self.log.error(
-                    f"Error compiling {tex_file}: {stderr or stdout or 'Unknown error'}"
-                )
-                return None
+    #     # Poll for finish (observe cancel)
+    #     while True:
+    #         if cancel is not None and cancel.is_set():
+    #             try:
+    #                 process.terminate()
+    #                 if not process.waitForFinished(1000):
+    #                     process.kill()
+    #                     process.waitForFinished(1000)
+    #             except Exception:
+    #                 pass
+    #             self.log.debug("Canceled LaTeX process terminated")
+    #             return None
+    #         if process.waitForFinished(200):
+    #             break
 
-            if not os.path.exists(pdf_file):
-                self.log.error(f"PDF not found after compile: {pdf_file}")
-                return None
+    #     if (process.exitStatus() != QProcess.ExitStatus.NormalExit) or (
+    #         process.exitCode() != 0
+    #     ):
+    #         stderr = (
+    #             process.readAllStandardError()
+    #             .data()
+    #             .decode("utf-8", errors="replace")
+    #         )
+    #         stdout = (
+    #             process.readAllStandardOutput()
+    #             .data()
+    #             .decode("utf-8", errors="replace")
+    #         )
+    #         self.log.error(
+    #             f"Error compiling {tex_file}: {stderr or stdout or 'Unknown error'}"
+    #         )
+    #         return None
 
-            self.log.info(f"Compiled {tex_file} → {pdf_file}")
-            return pdf_file
+    #     if not os.path.exists(pdf_file):
+    #         self.log.error(f"PDF not found after compile: {pdf_file}")
+    #         return None
 
-        finally:
-            if semaphore is not None and acquired:
-                try:
-                    semaphore.release()
-                except Exception:
-                    pass
+    #     self.log.info(f"Compiled {tex_file} → {pdf_file}")
+    #     return pdf_file
+
+    # finally:
+    #     if semaphore is not None and acquired:
+    #         try:
+    #             semaphore.release()
+    #         except Exception:
+    #             pass
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, CaseBrief):
