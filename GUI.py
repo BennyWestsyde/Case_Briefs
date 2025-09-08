@@ -1450,7 +1450,10 @@ class Initializer(Logged):
 
     def ensure_dir(self, path: tuple[Path]) -> None:
         path_str = path[0]
-        relative_print_path = path_str.relative_to(self.global_vars.write_dir)
+        try:
+            relative_print_path = path_str.relative_to(self.global_vars.bundle_dir)
+        except ValueError:
+            relative_print_path = path_str
         self.log.debug(f"Ensuring directory exists: {relative_print_path}")
         self.console.append(f"Ensuring directory exists: {relative_print_path}\n")
         if not path_str.exists():
@@ -1468,7 +1471,10 @@ class Initializer(Logged):
 
     def ensure_file(self, file: tuple[Path]) -> None:
         file_path = file[0]
-        relative_print_path = file_path.relative_to(self.global_vars.write_dir)
+        try:
+            relative_print_path = file_path.relative_to(self.global_vars.bundle_dir)
+        except ValueError:
+            relative_print_path = file_path
         self.log.debug(f"Ensuring file exists: {relative_print_path}")
         self.console.append(f"Ensuring file exists: {relative_print_path}\n")
         if not file_path.exists():
@@ -1486,7 +1492,10 @@ class Initializer(Logged):
 
     def ensure_db(self, db: tuple[Path]) -> None:
         db_path = db[0]
-        relative_print_path = db_path.relative_to(self.global_vars.write_dir)
+        try:
+            relative_print_path = db_path.relative_to(self.global_vars.bundle_dir)
+        except ValueError:
+            relative_print_path = db_path
         self.log.debug(f"Ensuring database exists: {relative_print_path}")
         self.console.append(f"Ensuring database exists: {relative_print_path}\n")
         if not SQL.ensure_db(log=self.log, config=self.global_vars):
@@ -1500,8 +1509,15 @@ class Initializer(Logged):
     def ensure_move(self, src_dst: tuple[Path, Path]) -> None:
         src = src_dst[0]
         dest = src_dst[1]
-        relative_src_path = src.relative_to(self.global_vars.write_dir)
-        relative_dest_path = dest.relative_to(self.global_vars.write_dir)
+
+        try:
+            relative_src_path = src.relative_to(self.global_vars.bundle_dir)
+        except ValueError:
+            relative_src_path = src
+        try:
+            relative_dest_path = dest.relative_to(self.global_vars.bundle_dir)
+        except ValueError:
+            relative_dest_path = dest
         self.log.debug(
             f"Ensuring file move from {relative_src_path} to {relative_dest_path}"
         )
