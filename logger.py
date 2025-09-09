@@ -466,6 +466,56 @@ class StructuredLogger:
                 # Swallow to avoid interfering with caller environments.
                 pass
 
+    def getChildLogger(self, suffix: str) -> "StructuredLogger":
+        """
+        Create a child StructuredLogger with a name derived from this logger.
+
+        Parameters
+        ----------
+        suffix
+            Suffix to append to this logger's name, separated by a dot.
+
+        Returns
+        -------
+        StructuredLogger
+            A new StructuredLogger instance with the combined name.
+        """
+        child_name = f"{self.logger.name}.{suffix}"
+        return StructuredLogger(
+            name=child_name,
+            level=self.logger.level,
+            log_file=None,  # Child loggers typically don't add new handlers
+            console=False,
+            color=None,
+            json_in_file=True,
+            propagate=True,  # Let it propagate to parent handlers
+        )
+
+    def getParentLogger(self, prefix: str) -> "StructuredLogger":
+        """
+        Create a parent StructuredLogger with a name derived from this logger.
+
+        Parameters
+        ----------
+        prefix
+            Prefix to prepend to this logger's name, separated by a dot.
+
+        Returns
+        -------
+        StructuredLogger
+            A new StructuredLogger instance with the combined name.
+        """
+        parent_name = f"{prefix}.{self.logger.name}"
+        return StructuredLogger(
+            name=parent_name,
+            level=self.logger.level,
+            log_file=None,  # Parent loggers typically don't add new handlers
+            console=False,
+            color=None,
+            json_in_file=True,
+            propagate=True,  # Let it propagate to parent handlers
+        )
+
 
 class Logged:
     def __init__(self, class_name: str, output_path: str, **kwargs: Any):

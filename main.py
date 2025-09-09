@@ -23,42 +23,54 @@ The resulting Latex document will be assembled as such:
 \\end{document}
 """
 
+from CaseCatalog import (
+    CaseBriefs,
+    CaseCatalog,
+)
+from GUIRefactor import CaseBriefInit, CaseBriefApp
 from Global_Vars import Global_Vars
+from QProcessTeXCompiler import QProcessTeXCompiler
+from RegexLatexCodec import RegexLatexCodec
+from SQLiteCaseBriefRepository import SQLiteCaseBriefRepository
 from logger import StructuredLogger
-from CaseBrief import CaseBriefs
 import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
-from GUI import CaseBriefInit, CaseBriefApp
 
 
 # Start by finding and loading all of the case brief files in ./Cases
 
 if __name__ == "__main__":
-    # Create a simple gui for the application
-    global_vars = Global_Vars()
-    log = StructuredLogger(
-        "Main",
-        "TRACE",
-        str(global_vars.write_dir / "CaseBriefs.log"),
-        True,
-        None,
-        True,
-        True,
-    )
+    logger = StructuredLogger("CaseBriefs", log_file="CaseBriefs.log", level="Trace")
+    logger.info("Starting Case Briefs Manager Application")
+    global_vars = Global_Vars(logger=logger)
 
-    log.info("Starting Case Briefs Application")
-    case_briefs = CaseBriefs(global_vars)
+    sqlite_repo = SQLiteCaseBriefRepository(
+        global_vars.sql_dst_file, global_vars.sql_create, logger
+    )
+    regex_latex_codec = RegexLatexCodec()
+    qprocess_tex_compiler = QProcessTeXCompiler(logger)
+    catalog = CaseCatalog(
+        sqlite_repo,
+        regex_latex_codec,
+        qprocess_tex_compiler,
+        global_vars.tinitex_binary,
+        global_vars.tmp_dir,
+        global_vars.cases_output_dir,
+        logger,
+    )
+    briefs = CaseBriefs(catalog)
+    briefs.reload_from_sql()
+
     app: QApplication = QApplication(sys.argv)
     app.setWindowIcon(QIcon("ui/text.book.closed.png"))
-    init_window: CaseBriefInit = CaseBriefInit(global_vars, case_briefs)
+    init_window: CaseBriefInit = CaseBriefInit(global_vars, briefs, logger=logger)
     init_window.show()
     if init_window.initializer.complete:
-        log.info("Initialization complete, launching main application")
+        logger.info("Initialization complete, launching main application")
     while init_window.isVisible():
         app.processEvents()
-    case_briefs.reload_cases_sql()
-    app_window: CaseBriefApp = CaseBriefApp(global_vars, case_briefs)
+    app_window: CaseBriefApp = CaseBriefApp(global_vars, briefs, logger)
     app_window.show()
     sys.exit(app.exec())
 else:

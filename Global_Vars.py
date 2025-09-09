@@ -111,28 +111,36 @@ class Global_Vars:
             gv.backup_location = gv.write_dir / "MyBackups"
     """
 
-    def __init__(self):
-        self.log = StructuredLogger(
-            "Globals_Vars", "TRACE", None, True, None, True, True
-        )
-        self.log.info(f"Initialized logger for {self.__class__.__name__}")
+    def __init__(self, logger: StructuredLogger | None = None) -> None:
+        self._saving_enabled: bool = False
+        if logger:
+            self.log = logger.getChildLogger(self.__class__.__name__)
+        else:
+            self.log = StructuredLogger(
+                __name__, log_file="CaseBriefs.log", level="Trace"
+            )
+        self.log.info("Initialized logger for %s", self.__class__.__name__)
         self.res_dir, self.bundle_dir, self.write_dir = self.app_dirs()
-        self.tmp_dir: Path = Path()
-        self.cases_dir: Path = Path()
-        self.cases_output_dir: Path = Path()
-        self.tex_src_dir: Path = Path()
-        self.tex_dst_dir: Path = Path()
-        self.master_src_tex: Path = Path()
-        self.master_src_sty: Path = Path()
-        self.master_dst_tex: Path = Path()
-        self.master_dst_sty: Path = Path()
-        self.sql_src_dir: Path = Path()
-        self.sql_dst_dir: Path = Path()
-        self.sql_src_file: Path = Path()
-        self.sql_dst_file: Path = Path()
-        self.sql_create: Path = Path()
-        self.backup_location: Path = Path()
-        self.tinitex_binary: Path = Path()
+        self.tmp_dir = self.write_dir / "TMP"
+        self.cases_dir = self.write_dir / "Cases"
+        self.cases_output_dir = self.write_dir / "Cases" / "Output"
+        self.tex_src_dir = self.res_dir / "tex_src"
+        self.tex_dst_dir = self.write_dir / "tex_src"
+        self.master_src_tex = self.tex_src_dir / "CaseBriefs.tex"
+        self.master_src_sty = self.tex_src_dir / "lawbrief.sty"
+        self.master_dst_tex = self.tex_dst_dir / "CaseBriefs.tex"
+        self.master_dst_sty = self.tex_dst_dir / "lawbrief.sty"
+        self.sql_src_dir = self.res_dir / "SQL"
+        self.sql_dst_dir = self.write_dir / "SQL"
+        self.sql_src_file = self.sql_src_dir / "Cases.sqlite"
+        self.sql_dst_file = self.sql_dst_dir / "Cases.sqlite"
+        self.sql_create = self.sql_src_dir / "Create_DB.sql"
+        self.backup_location: Path = self.write_dir / "Backup"
+        self.tinitex_binary: Path = (
+            self.res_dir / "bin" / "tinitex"
+            if os.name != "nt"
+            else self.res_dir / "bin" / "tinitex.exe"
+        )
         results: dict[str, Path] | None = self.load_from_json()
         if results:
             self.log.info("Loaded global variables from JSON")
@@ -156,30 +164,6 @@ class Global_Vars:
             self.sql_dst_file = results.get("sql_dst_file", self.sql_dst_file)
             self.sql_create = results.get("sql_create", self.sql_create)
             self.backup_location = results.get("backup_location", self.backup_location)
-            self.save_to_json()
-        else:
-            self.log.warning("No global variables found in JSON")
-            self.tmp_dir = self.write_dir / "TMP"
-            self.cases_dir = self.write_dir / "Cases"
-            self.cases_output_dir = self.write_dir / "Cases" / "Output"
-            self.tex_src_dir = self.res_dir / "tex_src"
-            self.tex_dst_dir = self.write_dir / "tex_src"
-            self.master_src_tex = self.tex_src_dir / "CaseBriefs.tex"
-            self.master_src_sty = self.tex_src_dir / "lawbrief.sty"
-            self.master_dst_tex = self.tex_dst_dir / "CaseBriefs.tex"
-            self.master_dst_sty = self.tex_dst_dir / "lawbrief.sty"
-            self.sql_src_dir = self.res_dir / "SQL"
-            self.sql_dst_dir = self.write_dir / "SQL"
-            self.sql_src_file = self.sql_src_dir / "Cases.sqlite"
-            self.sql_dst_file = self.sql_dst_dir / "Cases.sqlite"
-            self.sql_create = self.sql_src_dir / "Create_DB.sql"
-            self.backup_location = self.write_dir / "Backup"
-        self.tinitex_binary = (
-            self.res_dir / "bin" / "tinitex"
-            if os.name != "nt"
-            else self.res_dir / "bin" / "tinitex.exe"
-        )
-        self.__setattr__ = self._setattr_
         for d in (
             self.write_dir,
             self.tmp_dir,
@@ -192,11 +176,30 @@ class Global_Vars:
             self.backup_location,
         ):
             Path(d).mkdir(parents=True, exist_ok=True)
-
-    def _setattr_(self, name: str, value: Any) -> None:
-        self.log.debug(f"Setting attribute '{name}' to '{value}'")
-        super().__setattr__(name, value)
+        self._saving_enabled = True
         self.save_to_json()
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if "log" in self.__dict__:
+            try:
+                if isinstance(value, Path):
+                    try:
+                        print_value = value.relative_to(Path.cwd())
+                    except ValueError:
+                        print_value = value
+                else:
+                    print_value = value
+                self.log.debug(f"Setting attribute '{name}' to '{print_value}'")
+            except Exception:
+                pass
+        super().__setattr__(name, value)
+        if name == "log":
+            return
+        if self._saving_enabled:
+            try:
+                self.save_to_json()
+            except Exception:
+                pass
 
     def app_dirs(self):
         # Where to READ bundled resources (inside .app or onefile temp)
