@@ -3,7 +3,7 @@
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
-proj_dir = Path(".").abspath()
+proj_dir = Path(".").absolute()
 
 # Collect package, binaries, and data for pyspellchecker (imported as 'spellchecker')
 sc_datas, sc_binaries, sc_hidden = collect_all("spellchecker")
