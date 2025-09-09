@@ -36,9 +36,10 @@ from PyQt6.QtCore import (
     pyqtSlot,
 )
 from PyQt6.QtGui import QDesktopServices
+from DataClasses import Label, Opinion, Subject
 from cleanup import clean_dir
 from typing import Any, Callable, List
-from CaseBrief import CaseBrief, CaseBriefs, Subject, Label, Opinion, SQL
+from CaseBrief import CaseBrief, CaseBriefs, SQL
 
 from logger import Logged
 from Global_Vars import Global_Vars
@@ -609,8 +610,8 @@ class CaseBriefCreator(Logged, QWidget):
                     opinions.append(Opinion(person.strip(), text.strip()))
 
         case_brief = CaseBrief(
-            config=self.global_vars,
-            subject=[Subject(s) for s in subjects],
+            global_vars=self.global_vars,
+            subjects=[Subject(s) for s in subjects],
             plaintiff=plaintiff,
             defendant=defendant,
             citation=citation,
@@ -1150,19 +1151,19 @@ class CaseBriefManager(Logged, QWidget):
                 if ":" in opinion:
                     person, text = opinion.split(":", 1)
                     opinions.append(Opinion(person.strip(), text.strip()))
-        case_brief.update_plaintiff(plaintiff)
-        case_brief.update_defendant(defendant)
-        case_brief.update_citation(citation)
+        case_brief.plaintiff = plaintiff
+        case_brief.defendant = defendant
+        case_brief.citation = citation
         case_brief.course = self.creator.class_selector.currentText()
         case_brief.subjects = [Subject(s) for s in subjects]
-        case_brief.update_facts(facts)
-        case_brief.update_procedure(procedure)
-        case_brief.update_issue(issue)
-        case_brief.update_holding(holding)
-        case_brief.update_principle(principle)
-        case_brief.update_reasoning(reasoning)
+        case_brief.facts = facts
+        case_brief.procedure = procedure
+        case_brief.issue = issue
+        case_brief.holding = holding
+        case_brief.principle = principle
+        case_brief.reasoning = reasoning
         case_brief.opinions = opinions
-        case_brief.update_notes(notes)
+        case_brief.notes = notes
         self.super_class.sql.saveBrief(case_brief)
         # case_brief.to_sql()
         # Label does not change

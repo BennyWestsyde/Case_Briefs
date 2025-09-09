@@ -1,61 +1,36 @@
+from __future__ import annotations
 from dataclasses import dataclass
-from pathlib import Path
-import threading
-from typing import Any, List, Optional, TypedDict
+from typing import Any
 import os
 from Global_Vars import Global_Vars
-from logger import StructuredLogger
-import re
-import sqlite3
-from PyQt6.QtCore import QSemaphore, QProcess
-
 from logger import Logged
-from pathlib import Path
+from strict import strict_path
+from DataClasses import CaseBriefDataTypes, Label, Opinion, Subject, CaseBriefData
+from logger import Logged, StructuredLogger
+from strict import strict_path
 from typing import Union
 
+
+import sqlite3
+from pathlib import Path
+from typing import Any
+
+
+from PyQt6.QtCore import QProcess, QSemaphore
+
+import re
+import threading
+from pathlib import Path
+from typing import Any, List, Optional, TypedDict
+
+from DataClasses import Label
+from DataClasses import Opinion
+from DataClasses import Subject
+from DataClasses import Label, Opinion, Subject
+from logger import Logged
+
 from strict import strict_path
-
-
-def tex_escape(input: str) -> str:
-    """Escape special characters for LaTeX."""
-    replacements: dict[str, str | int | None] = {
-        "{": "\\{",
-        "}": "\\}",
-        "$": "\\$",
-        "%": "\\%",
-        "#": "\\#",
-        "_": "\\_",
-        "~": "\\textasciitilde{}",
-        "^": "\\textasciicircum{}",
-        "&": "\\&",
-    }
-    return (
-        str.translate(input, str.maketrans(replacements))
-        .replace("\n", r"\\" + "\n")
-        .replace(". ", r".\ ")
-        .replace("...", r"\ldots")
-    )
-
-
-def tex_unescape(input: str) -> str:
-    """Unescape special characters for LaTeX."""
-    replacements: dict[str, str | int | None] = {
-        "\\{": "{",
-        "\\}": "}",
-        "\\$": "$",
-        "\\%": "%",
-        "\\#": "#",
-        "\\_": "_",
-        "\\textasciitilde{}": "~",
-        "\\textasciicircum{}": "^",
-        "\\&": "&",
-    }
-    return (
-        str.translate(input, str.maketrans(replacements))
-        .replace(r"\\" + "\n", "\n")
-        .replace(r".\ ", ". ")
-        .replace(r"\ldots", "...")
-    )
+from pathlib import Path
 
 
 SQLiteValue = Union[str, int, float, bytes, None]
@@ -126,7 +101,7 @@ class SQL(Logged):
         """Close the database connection."""
         self.connection.close()
 
-    def saveBrief(self, brief: "CaseBrief") -> None:
+    def saveBrief(self, brief: "CaseBriefData") -> None:
         """Save a case brief to the database."""
         self.log.debug(f"Saving brief for case: {brief.citation}")
         cases_table_query = """
@@ -302,7 +277,7 @@ class SQL(Logged):
         self.commit()
         self.log.info(f"Database restored successfully")
 
-    def loadBrief(self, case_label: str) -> "CaseBrief":
+    def loadBrief(self, case_label: str) -> "CaseBriefData":
         """Load a case brief from the database by its label."""
         self.log.debug(f"Loading case brief from SQL with label {case_label}")
         self.execute(
@@ -333,8 +308,8 @@ class SQL(Logged):
         subjects = [Subject(subject[-1]) for subject in self.cursor.fetchall()]
         # Assuming the database schema matches the order of fields in CaseBrief
         case_brief = CaseBrief(
-            config=self.global_vars,
-            subject=subjects,
+            global_vars=self.global_vars,
+            subjects=subjects,
             opinions=opinions,
             plaintiff=cur_case[0],
             defendant=cur_case[1],
@@ -422,6 +397,48 @@ class SQL(Logged):
         self.execute("SELECT name FROM Courses")
         courses = [row[0] for row in self.cursor.fetchall()]
         return courses
+
+
+def tex_escape(input: str) -> str:
+    """Escape special characters for LaTeX."""
+    replacements: dict[str, str | int | None] = {
+        "{": "\\{",
+        "}": "\\}",
+        "$": "\\$",
+        "%": "\\%",
+        "#": "\\#",
+        "_": "\\_",
+        "~": "\\textasciitilde{}",
+        "^": "\\textasciicircum{}",
+        "&": "\\&",
+    }
+    return (
+        str.translate(input, str.maketrans(replacements))
+        .replace("\n", r"\\" + "\n")
+        .replace(". ", r".\ ")
+        .replace("...", r"\ldots")
+    )
+
+
+def tex_unescape(input: str) -> str:
+    """Unescape special characters for LaTeX."""
+    replacements: dict[str, str | int | None] = {
+        "\\{": "{",
+        "\\}": "}",
+        "\\$": "$",
+        "\\%": "%",
+        "\\#": "#",
+        "\\_": "_",
+        "\\textasciitilde{}": "~",
+        "\\textasciicircum{}": "^",
+        "\\&": "&",
+    }
+    return (
+        str.translate(input, str.maketrans(replacements))
+        .replace(r"\\" + "\n", "\n")
+        .replace(r".\ ", ". ")
+        .replace(r"\ldots", "...")
+    )
 
 
 class Latex(Logged):
@@ -584,8 +601,8 @@ class Latex(Logged):
             )
 
         return CaseBrief(
-            config=self.global_vars,
-            subject=subjects,
+            global_vars=self.global_vars,
+            subjects=subjects,
             plaintiff=plaintiff,
             defendant=defendant,
             citation=citation,
@@ -744,72 +761,7 @@ class Latex(Logged):
                     pass
 
 
-# Creating a dataclass version of subject
-@dataclass
-class Subject:
-    """A class to represent a legal subject."""
-
-    name: str
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, Subject):
-            return self.name == other.name
-        elif isinstance(other, str):
-            return self.name == other
-        else:
-            return False
-
-    def __repr__(self) -> str:
-        return f"Subject(name={self.name})"
-
-
-@dataclass
-class Label:
-    """A class to represent a citable label for a case."""
-
-    text: str
-
-    def __str__(self) -> str:
-        return self.text
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, Label):
-            return self.text == other.text
-        elif isinstance(other, str):
-            return self.text == other
-        else:
-            return False
-
-    def __repr__(self) -> str:
-        return f"Label(label={self.text})"
-
-
-@dataclass
-class Opinion:
-    """A class to represent a court opinion."""
-
-    author: str
-    text: str
-
-    def __str__(self) -> str:
-        return f"{self.author}: {self.text}\n"
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, Opinion):
-            return self.author == other.author and self.text == other.text
-        elif isinstance(other, str):
-            return str(self) == other
-        else:
-            return False
-
-    def __repr__(self) -> str:
-        return f"Opinion(author={self.author}, text={self.text})"
-
-
-class CaseBrief(Logged):
+class CaseBrief(Logged, CaseBriefData):
     """
     A class to manage case briefs.
 
@@ -833,115 +785,18 @@ class CaseBrief(Logged):
 
     def __init__(
         self,
-        config: Global_Vars,
-        subject: list[Subject],
-        plaintiff: str,
-        defendant: str,
-        citation: str,
-        course: str,
-        facts: str,
-        procedure: str,
-        issue: str,
-        holding: str,
-        principle: str,
-        reasoning: str,
-        opinions: list[Opinion],
-        label: Label,
-        notes: str,
+        global_vars: Global_Vars,
         super_class: Any,
+        **kwargs: CaseBriefDataTypes,
     ):
-        self.global_vars = config
+        self.global_vars = global_vars
         super().__init__(
-            self.__class__.__name__, str(self.global_vars.write_dir / "CaseBriefs.log")
+            self.__class__.__name__,
+            str(self.global_vars.write_dir / "CaseBriefs.log"),
+            **kwargs,
         )
-        self.subjects = subject
-        self.plaintiff = plaintiff
-        self.defendant = defendant
-        self.course = course
-        self.citation = citation
-        self.facts = facts
-        self.procedure = procedure
-        self.issue = issue
-        self.holding = holding
-        self.principle = principle
-        self.reasoning = reasoning
-        self.opinions = opinions
-        self.label = label
-        self.notes = notes
         self.super_class = super_class
         self.latex = Latex(self.global_vars, self)
-
-    @property
-    def title(self) -> str:
-        return f"{self.plaintiff} v. {self.defendant}"
-
-    @property
-    def filename(self) -> str:
-        return f"{self.plaintiff}_V_{self.defendant}".replace(" ", "_")
-
-    def add_subject(self, subject: Subject) -> None:
-        """Add a subject to the case brief."""
-        self.subjects.append(subject)
-
-    def remove_subject(self, subject: Subject) -> None:
-        """Remove a subject from the case brief."""
-        self.subjects = [s for s in self.subjects if s != subject]
-
-    def update_subject(self, old_subject: Subject, new_subject: Subject) -> None:
-        """Update a subject in the case brief."""
-        self.subjects = [new_subject if s == old_subject else s for s in self.subjects]
-
-    def update_plaintiff(self, plaintiff: str) -> None:
-        """Update the plaintiff in the case brief."""
-        self.plaintiff = plaintiff
-
-    def update_defendant(self, defendant: str) -> None:
-        """Update the defendant in the case brief."""
-        self.defendant = defendant
-
-    def update_citation(self, citation: str) -> None:
-        """Update the citation in the case brief."""
-        self.citation = citation
-
-    def update_facts(self, facts: str) -> None:
-        """Update the facts in the case brief."""
-        self.facts = facts
-
-    def update_procedure(self, procedure: str) -> None:
-        """Update the procedure in the case brief."""
-        self.procedure = procedure
-
-    def update_issue(self, issue: str) -> None:
-        """Update the issue in the case brief."""
-        self.issue = issue
-
-    def update_holding(self, holding: str) -> None:
-        """Update the holding in the case brief."""
-        self.holding = holding
-
-    def update_principle(self, principle: str) -> None:
-        """Update the principle in the case brief."""
-        self.principle = principle
-
-    def update_reasoning(self, reasoning: str) -> None:
-        """Update the reasoning in the case brief."""
-        self.reasoning = reasoning
-
-    def add_opinion(self, opinion: Opinion) -> None:
-        """Add an opinion to the case brief."""
-        self.opinions.append(opinion)
-
-    def remove_opinion(self, opinion: Opinion) -> None:
-        """Remove an opinion from the case brief."""
-        self.opinions = [op for op in self.opinions if op != opinion]
-
-    def update_label(self, label: Label) -> None:
-        """Update the label in the case brief."""
-        self.label = label
-
-    def update_notes(self, notes: str) -> None:
-        """Update the notes in the case brief."""
-        self.notes = notes
 
     def get_pdf_path(self) -> str:
         """Get the path to the PDF file for this case brief."""
@@ -949,296 +804,24 @@ class CaseBrief(Logged):
             strict_path(self.global_vars.cases_output_dir) / f"{self.filename}.pdf"
         )
 
-    # def to_latex(self) -> str:
-    #     """Generate a LaTeX representation of the case brief."""
-    #     citation_str = tex_escape(self.citation)
-    #     subjects_str = ", ".join(str(s) for s in self.subjects)
-    #     opinions_str = ("\n").join(str(op) for op in self.opinions)
-    #     opinions_str = tex_escape(
-    #         opinions_str
-    #     )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
-    #     opinions_str = re.sub(
-    #         r"CITE\((.*?)\)",
-    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-    #         opinions_str,
-    #     )
-    #     # Replace citations in facts, procedure, and issue with \hyperref[case:self.label]{\textit{self.title}}
-    #     facts_str = tex_escape(
-    #         self.facts
-    #     )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
-    #     facts_str = re.sub(
-    #         r"CITE\((.*?)\)",
-    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-    #         facts_str,
-    #     )
-    #     procedure_str = tex_escape(self.procedure)
-    #     procedure_str = re.sub(
-    #         r"CITE\((.*?)\)",
-    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-    #         procedure_str,
-    #     )
-    #     issue_str = tex_escape(self.issue)
-    #     issue_str = re.sub(
-    #         r"CITE\((.*?)\)",
-    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-    #         issue_str,
-    #     )
-    #     principle_str = tex_escape(self.principle)
-    #     reasoning_str = tex_escape(self.reasoning)
-    #     notes_str = tex_escape(
-    #         self.notes
-    #     )  # .replace('\n', r'\\'+'\n').replace("$", r"\$")
-    #     notes_str = re.sub(
-    #         r"CITE\((.*?)\)",
-    #         lambda m: self.super_class.sql.cite_case_brief(str(m.group(1))),
-    #         notes_str,
-    #     )
-
-    #     return """
-    #         \\documentclass[../tex_src/CaseBriefs.tex]{subfiles}
-    #         \\usepackage{lawbrief}
-    #         \\begin{document}
-    #         \\NewBrief{subject={%s},
-    #                 plaintiff={%s},
-    #                 defendant={%s},
-    #                 citation={%s},
-    #                 course={%s},
-    #                 facts={%s},
-    #                 procedure={%s},
-    #                 issue={%s},
-    #                 holding={%s},
-    #                 principle={%s},
-    #                 reasoning={%s},
-    #                 opinions={%s},
-    #                 label={case:%s},
-    #                 notes={%s}
-    #         }
-    #         \\end{document}
-    #     """ % (
-    #         subjects_str,
-    #         self.plaintiff,
-    #         self.defendant,
-    #         citation_str,
-    #         self.course,
-    #         facts_str,
-    #         procedure_str,
-    #         issue_str,
-    #         self.holding,
-    #         principle_str,
-    #         reasoning_str,
-    #         opinions_str,
-    #         self.label,
-    #         notes_str,
-    #     )
-
-    # def to_sql(self) -> None:
-    #     self.log.debug(f"Saving case brief '{self.label.text}' to SQL database")
-    #     conn = sqlite3.connect(str(self.global_vars.sql_dst_file))
-    #     conn.execute("PRAGMA foreign_keys = ON")
-    #     curr = conn.cursor()
-    #     try:
-    #         # Insert or update the main case brief information
-    #         curr.execute(
-    #             """
-    #             INSERT INTO Cases (label, plaintiff, defendant, citation, course, facts, procedure, issue, holding, principle, reasoning, notes)
-    #             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    #             ON CONFLICT(label) DO UPDATE SET
-    #                 plaintiff=excluded.plaintiff,
-    #                 defendant=excluded.defendant,
-    #                 citation=excluded.citation,
-    #                 course=excluded.course,
-    #                 facts=excluded.facts,
-    #                 procedure=excluded.procedure,
-    #                 issue=excluded.issue,
-    #                 holding=excluded.holding,
-    #                 principle=excluded.principle,
-    #                 reasoning=excluded.reasoning,
-    #                 notes=excluded.notes
-    #         """,
-    #             (
-    #                 self.label.text,
-    #                 self.plaintiff,
-    #                 self.defendant,
-    #                 self.citation,
-    #                 self.course,
-    #                 self.facts,
-    #                 self.procedure,
-    #                 self.issue,
-    #                 self.holding,
-    #                 self.principle,
-    #                 self.reasoning,
-    #                 self.notes,
-    #             ),
-    #         )
-
-    #         # Clear existing subjects and opinions
-    #         self.log.debug("Deleting existing subjects and opinions")
-    #         curr.execute(
-    #             "DELETE FROM CaseSubjects WHERE case_label = ?", (self.label.text,)
-    #         )
-    #         curr.execute(
-    #             "DELETE FROM CaseOpinions WHERE case_label = ?", (self.label.text,)
-    #         )
-
-    #         # Insert subjects
-    #         for subject in self.subjects:
-    #             self.log.trace("Saving Subject: ", subject.name)
-    #             curr.execute("SELECT id FROM Subjects where name = ?", (subject.name,))
-    #             subject_id = curr.fetchone()
-    #             if not subject_id:
-    #                 curr.execute(
-    #                     "INSERT INTO Subjects (name) VALUES (?)", (subject.name,)
-    #                 )
-    #                 curr.execute(
-    #                     "SELECT id FROM Subjects where name = ?", (subject.name,)
-    #                 )
-    #                 subject_id = curr.fetchone()
-    #             subject_id = subject_id[0]
-    #             curr.execute(
-    #                 "INSERT INTO CaseSubjects (case_label, subject_id) VALUES (?, ?)",
-    #                 (
-    #                     self.label.text,
-    #                     subject_id,
-    #                 ),
-    #             )
-
-    #         # Insert opinions
-    #         for opinion in self.opinions:
-    #             self.log.trace("Saving Opinion By: ", opinion.author)
-    #             curr.execute(
-    #                 "SELECT id FROM Opinions where opinion_text = ?", (opinion.text,)
-    #             )
-    #             opinion_id = curr.fetchone()
-    #             if not opinion_id:
-    #                 curr.execute(
-    #                     "INSERT INTO Opinions (author, opinion_text) VALUES (?, ?)",
-    #                     (
-    #                         opinion.author,
-    #                         opinion.text,
-    #                     ),
-    #                 )
-    #                 curr.execute(
-    #                     "SELECT id FROM Opinions where opinion_text = ?",
-    #                     (opinion.text,),
-    #                 )
-    #                 opinion_id = curr.fetchone()
-    #             opinion_id = opinion_id[0]
-    #             curr.execute(
-    #                 "INSERT INTO CaseOpinions (case_label, opinion_id) VALUES (?, ?)",
-    #                 (self.label.text, opinion_id),
-    #             )
-
-    #         conn.commit()
-    #     except sqlite3.Error as e:
-    #         conn.rollback()
-    #         self.log.error(f"Error saving case brief to database: {e}")
-    #     finally:
-    #         conn.close()
-
-    # def save_to_file(self, filename: str) -> None:
-    #     """Save the LaTeX representation of the case brief to a file."""
-    #     with open(filename, "w") as f:
-    #         f.write(self.to_latex())
-    #     self.log.info(f"Saved Latex to {filename}")
-
-    # def compile_to_pdf(
-    #     self,
-    #     semaphore: Optional[QSemaphore] = None,
-    #     cancel: Optional[threading.Event] = None,
-    # ) -> str | None:
-    #     return self.latex.compile(semaphore, cancel)
-
-    # tex_file = strict_path(self.global_vars.cases_dir) / f"{self.filename}.tex"
-    # self.super_class.latex.saveBrief(self)
-    # pdf_file = self.get_pdf_path()
-
-    # try:
-    #     if os.path.exists(pdf_file):
-    #         os.remove(pdf_file)
-    # except Exception:
-    #     pass
-
-    # process = QProcess()
-    # acquired = False
-    # try:
-    #     program = self.global_vars.tinitex_binary
-    #     if not program.exists():
-    #         self.log.error(f"TeX program not found: {program}")
-    #         return None
-
-    #     process.setWorkingDirectory(str(self.global_vars.cases_dir))
-    #     relative_output_dir = os.path.relpath(
-    #         self.global_vars.cases_output_dir, self.global_vars.cases_dir
-    #     )
-
-    #     # Acquire semaphore (observe cancel)
-    #     if semaphore is not None:
-    #         while True:
-    #             if cancel is not None and cancel.is_set():
-    #                 self.log.debug("Cancel before acquire")
-    #                 return None
-    #             if semaphore.tryAcquire(1, 250):
-    #                 acquired = True
-    #                 break
-
-    #     process.setProgram(str(program))
-    #     process.setArguments([f"--output-dir={relative_output_dir}", str(tex_file)])
-    #     process.start()
-
-    #     # Poll for finish (observe cancel)
-    #     while True:
-    #         if cancel is not None and cancel.is_set():
-    #             try:
-    #                 process.terminate()
-    #                 if not process.waitForFinished(1000):
-    #                     process.kill()
-    #                     process.waitForFinished(1000)
-    #             except Exception:
-    #                 pass
-    #             self.log.debug("Canceled LaTeX process terminated")
-    #             return None
-    #         if process.waitForFinished(200):
-    #             break
-
-    #     if (process.exitStatus() != QProcess.ExitStatus.NormalExit) or (
-    #         process.exitCode() != 0
-    #     ):
-    #         stderr = (
-    #             process.readAllStandardError()
-    #             .data()
-    #             .decode("utf-8", errors="replace")
-    #         )
-    #         stdout = (
-    #             process.readAllStandardOutput()
-    #             .data()
-    #             .decode("utf-8", errors="replace")
-    #         )
-    #         self.log.error(
-    #             f"Error compiling {tex_file}: {stderr or stdout or 'Unknown error'}"
-    #         )
-    #         return None
-
-    #     if not os.path.exists(pdf_file):
-    #         self.log.error(f"PDF not found after compile: {pdf_file}")
-    #         return None
-
-    #     self.log.info(f"Compiled {tex_file} → {pdf_file}")
-    #     return pdf_file
-
-    # finally:
-    #     if semaphore is not None and acquired:
-    #         try:
-    #             semaphore.release()
-    #         except Exception:
-    #             pass
-
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, CaseBrief):
             return False
         return self.label.text == value.label.text
 
 
-class CaseBriefs(Logged):
+@dataclass
+class CaseBriefsData:
+    def __post_init__(self):
+        self.case_briefs: list[CaseBrief] = []
+
+    @property
+    def subjects(self) -> list[Subject]:
+        """Get all subjects from the case briefs."""
+        return [subject for cb in self.case_briefs for subject in cb.subjects]
+
+
+class CaseBriefs(Logged, CaseBriefsData):
     """A class to manage multiple case briefs."""
 
     def __init__(self, config: Global_Vars):
@@ -1247,14 +830,8 @@ class CaseBriefs(Logged):
             self.__class__.__name__, str(config.write_dir / "CaseBriefs.log")
         )
         self.global_vars: Global_Vars = config
-        self.case_briefs: list[CaseBrief] = []
         self.sql = SQL(self.global_vars, self)
         self.latex = Latex(self.global_vars, self)
-
-    @property
-    def subjects(self) -> list[Subject]:
-        """Get all subjects from the case briefs."""
-        return [subject for cb in self.case_briefs for subject in cb.subjects]
 
     def reload_cases_tex(self) -> None:
         """Reload all case briefs from the ./Cases directory."""
@@ -1272,7 +849,15 @@ class CaseBriefs(Logged):
         for label in labels:
             case_brief = self.sql.loadBrief(label)
             if case_brief not in self.case_briefs:
-                self.add_case_brief(case_brief)
+                # Drop log from the copied object
+
+                self.add_case_brief(
+                    CaseBrief(
+                        global_vars=self.global_vars,
+                        super_class=self,
+                        **case_brief.asdict(),
+                    )
+                )
 
     def add_case_brief(self, case_brief: CaseBrief) -> None:
         """Add a case brief to the collection."""
