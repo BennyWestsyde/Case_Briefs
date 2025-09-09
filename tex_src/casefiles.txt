@@ -27,6 +27,7 @@
 ../Cases/Petterson_V_Pattberg.tex
 ../Cases/Princess_Cuise_Lines_V_GE.tex
 ../Cases/Ranson_V_Kitner.tex
+../Cases/Rego_V_Decker.tex
 ../Cases/Slocum_V_Food_Fair_Stores_of_Florida.tex
 ../Cases/Spano_V_Perini_Corp.tex
 ../Cases/State_Rubbish_Collectors_Ass'n_V_Siliznoff.tex
