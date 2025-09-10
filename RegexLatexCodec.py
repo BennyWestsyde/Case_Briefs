@@ -72,8 +72,7 @@ class RegexLatexCodec:
 \\documentclass[../tex_src/CaseBriefs.tex]{{subfiles}}
 \\usepackage{{lawbrief}}
 \\begin{{document}}
-\\NewBrief{{
-  subject={{{subjects}}},
+\\NewBrief{{subject={{{subjects}}},
   plaintiff={{{esc_and_cite(data.plaintiff)}}},
   defendant={{{esc_and_cite(data.defendant)}}},
   citation={{{esc_and_cite(data.citation)}}},

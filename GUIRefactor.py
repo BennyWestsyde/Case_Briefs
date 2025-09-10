@@ -802,6 +802,8 @@ class CompileAllToPdfWorker(QObject):
     ):
         super().__init__()
         self._case_briefs = case_briefs
+        for cb in self._case_briefs.items:
+            self._case_briefs.catalog.render_to_tex(cb)
         self._logger = logger.getChildLogger("CompileAllToPdfWorker")
         self._global_vars = global_vars
         self._pool = QThreadPool.globalInstance()
@@ -1078,6 +1080,7 @@ class CaseBriefManager(QWidget):
         dlg.setAutoClose(True)
         dlg.setAutoReset(True)
         dlg.setMinimumDuration(0)
+        dlg.setRange(0, len(case_briefs.items))
         dlg.setValue(0)
         dlg.show()
 

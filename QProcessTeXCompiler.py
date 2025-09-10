@@ -4,7 +4,7 @@ from logger import StructuredLogger
 from PyQt6.QtCore import QProcess
 
 
-import os
+# import os
 from pathlib import Path
 
 
@@ -30,7 +30,13 @@ class QProcessTeXCompiler:
         proc.setWorkingDirectory(str(workdir))
         proc.setProgram(str(engine))
         proc.setArguments(
-            [f"--output-dir={os.path.relpath(outdir, workdir)}", str(tex_file)]
+            [
+                f"--output-dir={outdir.relative_to(workdir)}",
+                "--pdf-engine-opt=-shell-escape",
+                "--no-auto-install",
+                # "--pdf-engine-opt=-interaction=nonstopmode",
+                f"{tex_file.relative_to(workdir)}",
+            ]
         )
         proc.start()
 

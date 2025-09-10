@@ -54,9 +54,7 @@ if __name__ == "__main__":
         sqlite_repo,
         regex_latex_codec,
         qprocess_tex_compiler,
-        global_vars.tinitex_binary,
-        global_vars.tmp_dir,
-        global_vars.cases_output_dir,
+        global_vars,
         logger,
     )
     briefs = CaseBriefs(catalog)

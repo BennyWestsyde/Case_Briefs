@@ -16,17 +16,16 @@ class CaseCatalog:
         repo: CaseBriefRepository,
         codec: LatexCodec,
         compiler: TeXCompiler,
-        engine: Path,
-        workdir: Path,
-        outdir: Path,
+        global_vars: Global_Vars,
         logger: StructuredLogger,
     ):
         self.repo = repo
         self.codec = codec
         self.compiler = compiler
-        self.engine = engine
-        self.workdir = workdir
-        self.outdir = outdir
+        self.engine = global_vars.tinitex_binary
+        self.workdir = global_vars.tmp_dir
+        self.casesdir = global_vars.cases_dir
+        self.outdir = global_vars.cases_output_dir
         self.log = logger.getChildLogger("CaseCatalog")
 
     # citation resolver via the repo (adaptor)
@@ -49,13 +48,13 @@ class CaseCatalog:
 
     def render_to_tex(self, brief: CaseBriefData) -> Path:
         tex = self.codec.to_tex(brief, cite=self._Citer(self.repo))
-        tex_file = self.workdir / f"{brief.filename}.tex"
+        tex_file = self.casesdir / f"{brief.filename}.tex"
         tex_file.write_text(tex, encoding="utf-8")
         return tex_file
 
     def compile_pdf(self, brief: CaseBriefData) -> Path | None:
         tex_file = self.render_to_tex(brief)
-        return self.compiler.compile(self.engine, self.workdir, self.outdir, tex_file)
+        return self.compiler.compile(self.engine, self.casesdir, self.outdir, tex_file)
 
 
 class CaseBriefs:
@@ -83,9 +82,7 @@ if __name__ == "__main__":
         sqlite_repo,
         regex_latex_codec,
         qprocess_tex_compiler,
-        global_vars.tinitex_binary,
-        global_vars.tmp_dir,
-        global_vars.cases_output_dir,
+        global_vars,
         logger,
     )
     briefs = CaseBriefs(catalog)

@@ -38,12 +38,23 @@
 }
 
 
-
 \newcommand{\indexsubjects}[1]{%
 		\edef\unwrapped{\unexpanded\expandafter{\romannumeral-`0#1}}%
 		\readlist*\subjectlist{\unwrapped}%
 		\foreachitem\z\in\subjectlist[]{\index{\z}}%
 }
+
+% \newcommand{\indexsubjects}[1]{%
+%   \ifblank{#1}{}{%
+%     \edef\unwrapped{\unexpanded\expandafter{\romannumeral-`0#1}}%
+%     \setsepchar{,|;|/}%
+%     \readlist*\subjectlist{\unwrapped}%
+%     \foreachitem\z\in\subjectlist[]{\index{\z}}%
+%   }%
+% }
+	
+
+
 
 
 \newcommand{\includecases}{
@@ -69,23 +80,42 @@
 
 	% Start each brief on a new page
 	\newpage
-	\pgfkeys{/brief, #1}
+	\pgfkeys{/brief/.cd, #1}
+
+	\pgfkeysgetvalue{/brief/subject}{\currentsubject}
+	\pgfkeysgetvalue{/brief/plaintiff}{\currentplaintiff}
+	\pgfkeysgetvalue{/brief/defendant}{\currentdefendant}
+	\pgfkeysgetvalue{/brief/citation}{\currentcitation}
+	\pgfkeysgetvalue{/brief/course}{\currentcourse}
+	\pgfkeysgetvalue{/brief/facts}{\currentfacts}
+	\pgfkeysgetvalue{/brief/procedure}{\currentprocedure}
+	\pgfkeysgetvalue{/brief/issue}{\currentissue}
+	\pgfkeysgetvalue{/brief/holding}{\currentholding}
+	\pgfkeysgetvalue{/brief/principle}{\currentprinciple}
+	\pgfkeysgetvalue{/brief/reasoning}{\currentreasoning}
+	\pgfkeysgetvalue{/brief/opinions}{\currentopinions}
+	\pgfkeysgetvalue{/brief/label}{\currentlabel}
+	\pgfkeysgetvalue{/brief/notes}{\currentnotes}
+
+	\typeout{[lawbrief] SUBJECT='\currentsubject'}
+	\typeout{[lawbrief] COURSE='\currentcourse'}
+
 
 	
-	\edef\currentsubject{\unexpanded\expandafter{\pgfkeysvalueof{/brief/subject}}}
-	\edef\currentplaintiff{\unexpanded\expandafter{\pgfkeysvalueof{/brief/plaintiff}}}
-	\edef\currentdefendant{\unexpanded\expandafter{\pgfkeysvalueof{/brief/defendant}}}
-	\edef\currentcitation{\unexpanded\expandafter{\pgfkeysvalueof{/brief/citation}}}
-	\edef\currentcourse{\unexpanded\expandafter{\pgfkeysvalueof{/brief/course}}}
-    \edef\currentfacts{\unexpanded\expandafter{\pgfkeysvalueof{/brief/facts}}}
-    \edef\currentprocedure{\unexpanded\expandafter{\pgfkeysvalueof{/brief/procedure}}}
-    \edef\currentissue{\unexpanded\expandafter{\pgfkeysvalueof{/brief/issue}}}
-    \edef\currentholding{\unexpanded\expandafter{\pgfkeysvalueof{/brief/holding}}}
-    \edef\currentprinciple{\unexpanded\expandafter{\pgfkeysvalueof{/brief/principle}}}
-    \edef\currentreasoning{\unexpanded\expandafter{\pgfkeysvalueof{/brief/reasoning}}}
-    \edef\currentopinions{\unexpanded\expandafter{\pgfkeysvalueof{/brief/opinions}}}
-    \edef\currentlabel{\unexpanded\expandafter{\pgfkeysvalueof{/brief/label}}}
-	\edef\currentnotes{\unexpanded\expandafter{\pgfkeysvalueof{/brief/notes}}}
+	% \edef\currentsubject{\unexpanded\expandafter{\pgfkeysvalueof{/brief/subject}}}
+	% \edef\currentplaintiff{\unexpanded\expandafter{\pgfkeysvalueof{/brief/plaintiff}}}
+	% \edef\currentdefendant{\unexpanded\expandafter{\pgfkeysvalueof{/brief/defendant}}}
+	% \edef\currentcitation{\unexpanded\expandafter{\pgfkeysvalueof{/brief/citation}}}
+	% \edef\currentcourse{\unexpanded\expandafter{\pgfkeysvalueof{/brief/course}}}
+    % \edef\currentfacts{\unexpanded\expandafter{\pgfkeysvalueof{/brief/facts}}}
+    % \edef\currentprocedure{\unexpanded\expandafter{\pgfkeysvalueof{/brief/procedure}}}
+    % \edef\currentissue{\unexpanded\expandafter{\pgfkeysvalueof{/brief/issue}}}
+    % \edef\currentholding{\unexpanded\expandafter{\pgfkeysvalueof{/brief/holding}}}
+    % \edef\currentprinciple{\unexpanded\expandafter{\pgfkeysvalueof{/brief/principle}}}
+    % \edef\currentreasoning{\unexpanded\expandafter{\pgfkeysvalueof{/brief/reasoning}}}
+    % \edef\currentopinions{\unexpanded\expandafter{\pgfkeysvalueof{/brief/opinions}}}
+    % \edef\currentlabel{\unexpanded\expandafter{\pgfkeysvalueof{/brief/label}}}
+	% \edef\currentnotes{\unexpanded\expandafter{\pgfkeysvalueof{/brief/notes}}}
 
 
 	% PDF metadata
@@ -118,7 +148,8 @@
 	\begin{center}
 		\begin{large}
 			\textbf{\currentcourse}
-			\indexsubjects{\currentcourse}
+			\index{\currentcourse}
+			%\indexsubjects{\currentcourse}
 		\end{large}\\
 		\begin{Huge}
 			\currentplaintiff\ v.\ \currentdefendant
