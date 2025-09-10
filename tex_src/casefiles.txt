@@ -1,3 +1,4 @@
+../Cases/1464-Eight,_Ltd_V_Joppich.tex
 ../Cases/Beard_Implement_Co_V_Krusa.tex
 ../Cases/Big_Town_Nursing_Home,_Inc_V_Newman.tex
 ../Cases/Brown_V_Kendall.tex
@@ -28,6 +29,7 @@
 ../Cases/Princess_Cuise_Lines_V_GE.tex
 ../Cases/Ranson_V_Kitner.tex
 ../Cases/Rego_V_Decker.tex
+../Cases/Schnell_V_Nell.tex
 ../Cases/Slocum_V_Food_Fair_Stores_of_Florida.tex
 ../Cases/Spano_V_Perini_Corp.tex
 ../Cases/State_Rubbish_Collectors_Ass'n_V_Siliznoff.tex
