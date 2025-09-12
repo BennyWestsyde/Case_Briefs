@@ -141,6 +141,11 @@ class Global_Vars:
             if os.name != "nt"
             else self.res_dir / "bin" / "tinitex.exe"
         )
+        # Update configuration
+        self.update_dir: Path = self.write_dir / "updates"
+        self.update_channel: str = "main"  # default channel
+        self.auto_check_updates: bool = True
+        self.auto_install_updates: bool = False
         results: dict[str, Path] | None = self.load_from_json()
         if results:
             self.log.info("Loaded global variables from JSON")
@@ -164,6 +169,11 @@ class Global_Vars:
             self.sql_dst_file = results.get("sql_dst_file", self.sql_dst_file)
             self.sql_create = results.get("sql_create", self.sql_create)
             self.backup_location = results.get("backup_location", self.backup_location)
+            # Update configuration
+            self.update_dir = results.get("update_dir", self.update_dir)
+            self.update_channel = results.get("update_channel", self.update_channel)
+            self.auto_check_updates = results.get("auto_check_updates", self.auto_check_updates)
+            self.auto_install_updates = results.get("auto_install_updates", self.auto_install_updates)
         for d in (
             self.write_dir,
             self.tmp_dir,
@@ -174,6 +184,7 @@ class Global_Vars:
             self.sql_src_dir,
             self.sql_dst_dir,
             self.backup_location,
+            self.update_dir,
         ):
             Path(d).mkdir(parents=True, exist_ok=True)
         self._saving_enabled = True

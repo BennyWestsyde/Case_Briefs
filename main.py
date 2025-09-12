@@ -70,6 +70,13 @@ if __name__ == "__main__":
         app.processEvents()
     app_window: CaseBriefApp = CaseBriefApp(global_vars, briefs, logger)
     app_window.show()
+    
+    # Check for updates on startup if enabled
+    try:
+        app_window.check_for_updates_on_startup()
+    except Exception as e:
+        logger.error(f"Error during startup update check: {e}")
+    
     sys.exit(app.exec())
 else:
     print("This module is intended to be run as a standalone application.")

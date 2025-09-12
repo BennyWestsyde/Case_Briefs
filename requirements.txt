@@ -2,3 +2,6 @@ PyQt6
 PyQt6-stubs
 PySpellChecker
 PyInstaller
+tufup
+packaging
+requests
