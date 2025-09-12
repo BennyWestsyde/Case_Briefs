@@ -152,20 +152,10 @@ class UpdateManager:
         Returns:
             Tuple of (status, latest_version, error_message)
         """
-        if not TUFUP_AVAILABLE:
-            return UpdateStatus.ERROR, None, "Tufup not available"
-        
-        if not self.client:
-            return UpdateStatus.ERROR, None, "Update client not initialized"
-        
         try:
             self.logger.info("Checking for updates...")
             
-            # For now, implement a basic version check
-            # In a full implementation, this would use tufup's update checking
-            # This is a simplified version for MVP
-            
-            # Mock implementation - in reality this would use GitHub API or tufup metadata
+            # Use GitHub API for update checking (works without tufup client)
             latest_version = self._get_latest_version_from_github()
             
             if latest_version and self._is_newer_version(latest_version, self.current_version):
