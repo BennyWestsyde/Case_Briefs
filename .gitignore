@@ -16,3 +16,8 @@ TMP/*
 __pycache__/*
 dist/*
 build/*
+
+# Update system files
+updates/
+tufup-repo/
+global_vars.json
