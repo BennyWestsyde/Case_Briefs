@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QComboBox,
     QTextEdit,
+    QDialog,
 )
 from PyQt6.QtCore import (
     QMutex,
@@ -42,7 +43,8 @@ from DataClasses import CaseBriefData, Label, Opinion, Subject
 
 from QProcessTeXCompiler import QProcessTeXCompiler
 from cleanup import clean_dir
-from typing import Any, Callable, List
+from UpdateManager import UpdateManager
+from UpdateDialogs import UpdateDialog, UpdateNotificationDialog
 from CaseCatalog import (
     CaseBriefs,
     TeXCompiler,
@@ -75,7 +77,7 @@ from PyQt6.QtWidgets import QLineEdit, QMenu, QTextEdit
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QMessageBox
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QAction
 from PyQt6.QtCore import QUrl
 
 
@@ -1728,9 +1730,16 @@ class CaseBriefApp(QMainWindow):
         self.case_briefs = case_briefs
         self.global_vars = global_vars
         self.log = logger.getChildLogger("App")
+        
+        # Initialize update manager
+        self.update_manager = UpdateManager(global_vars, logger)
+        
         self.setWindowTitle("Case Briefs Manager")
         self.setGeometry(100, 100, 600, 400)
         self.log.info("Initializing Case Briefs Application")
+        
+        # Set up menu bar
+        self.setup_menu_bar()
 
         layout = QGridLayout()
         new_case_brief_button = QPushButton("Create Case Brief")
@@ -1764,6 +1773,60 @@ class CaseBriefApp(QMainWindow):
         # after super().__init__(...)
         self._threads: list[QThread] = []  # keep strong refs so threads don't get GC’d
 
+    def setup_menu_bar(self):
+        """Set up the application menu bar."""
+        menubar = self.menuBar()
+        
+        # Help menu
+        help_menu = menubar.addMenu('Help')
+        
+        # Check for Updates action
+        update_action = QAction('Check for Updates...', self)
+        update_action.triggered.connect(self.show_update_dialog)
+        help_menu.addAction(update_action)
+        
+        # About action
+        about_action = QAction('About', self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+    
+    def show_update_dialog(self):
+        """Show the update dialog."""
+        self.log.info("Opening update dialog")
+        dialog = UpdateDialog(self.update_manager, self)
+        dialog.exec()
+    
+    def show_about(self):
+        """Show about dialog."""
+        from version import __version__
+        
+        QMessageBox.about(
+            self,
+            "About Case Briefs Manager",
+            f"Case Briefs Manager\n"
+            f"Version {__version__}\n\n"
+            f"A tool for creating and managing legal case briefs.\n\n"
+            f"Update Channel: {self.update_manager.channel.value.capitalize()}"
+        )
+    
+    def check_for_updates_on_startup(self):
+        """Check for updates on application startup if enabled."""
+        if self.global_vars.auto_check_updates:
+            self.log.info("Checking for updates on startup")
+            try:
+                from UpdateManager import UpdateStatus
+                status, version, error = self.update_manager.check_for_updates()
+                if status == UpdateStatus.UPDATE_AVAILABLE and version:
+                    # Show notification dialog
+                    dialog = UpdateNotificationDialog(
+                        version, 
+                        self.update_manager.channel.value,
+                        self
+                    )
+                    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        self.show_update_dialog()
+            except Exception as e:
+                self.log.error(f"Error during startup update check: {e}")
     def create_case_brief(self):
         # Logic to create a new case brief
         self.log.info("Creating a new case brief...")
