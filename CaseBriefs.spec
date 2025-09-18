@@ -18,6 +18,7 @@ a = Analysis(
         ('SQL/Wipe_DB.sql', 'SQL'),
         #('Cases', 'Cases'),
         ('bin', 'bin'),
+        ('ui', 'ui')
     ] + sc_datas,
     hiddenimports=sc_hidden + ['spellchecker'],
     hookspath=[],
