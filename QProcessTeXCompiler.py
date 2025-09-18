@@ -33,7 +33,6 @@ class QProcessTeXCompiler:
             [
                 f"--output-dir={outdir.relative_to(workdir)}",
                 "--pdf-engine-opt=-shell-escape",
-                "--no-auto-install",
                 # "--pdf-engine-opt=-interaction=nonstopmode",
                 f"{tex_file.relative_to(workdir)}",
             ]
