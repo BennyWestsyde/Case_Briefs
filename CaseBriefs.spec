@@ -61,6 +61,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='CaseBriefs.app',
-    icon=None,
+    icon='./ui/law.book.closed.icns',
     bundle_identifier='com.mycompany.casebriefs',
 )
