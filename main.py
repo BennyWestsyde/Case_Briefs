@@ -23,6 +23,7 @@ The resulting Latex document will be assembled as such:
 \\end{document}
 """
 
+from pathlib import Path
 from CaseCatalog import (
     CaseBriefs,
     CaseCatalog,
@@ -41,7 +42,8 @@ from PyQt6.QtGui import QIcon
 # Start by finding and loading all of the case brief files in ./Cases
 
 if __name__ == "__main__":
-    logger = StructuredLogger("CaseBriefs", log_file="CaseBriefs.log", level="Trace")
+    log_file = Path(__file__).resolve().parent / "CaseBriefs.log"
+    logger = StructuredLogger("CaseBriefs", log_file=str(log_file), level="Trace")
     logger.info("Starting Case Briefs Manager Application")
     global_vars = Global_Vars(logger=logger)
 
