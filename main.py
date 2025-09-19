@@ -23,13 +23,12 @@ The resulting Latex document will be assembled as such:
 \\end{document}
 """
 
-from pathlib import Path
 from CaseCatalog import (
     CaseBriefs,
     CaseCatalog,
 )
 from GUIRefactor import CaseBriefInit, CaseBriefApp
-from Global_Vars import Global_Vars
+from Global_Vars import Global_Vars, WRITE_DIR
 from QProcessTeXCompiler import QProcessTeXCompiler
 from RegexLatexCodec import RegexLatexCodec
 from SQLiteCaseBriefRepository import SQLiteCaseBriefRepository
@@ -42,7 +41,7 @@ from PyQt6.QtGui import QIcon
 # Start by finding and loading all of the case brief files in ./Cases
 
 if __name__ == "__main__":
-    log_file = Path(__file__).resolve().parent / "CaseBriefs.log"
+    log_file = WRITE_DIR / "CaseBriefs.log"
     logger = StructuredLogger("CaseBriefs", log_file=str(log_file), level="Trace")
     logger.info("Starting Case Briefs Manager Application")
     global_vars = Global_Vars(logger=logger)

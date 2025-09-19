@@ -12,6 +12,49 @@ global APP_NAME
 APP_NAME = "CaseBriefs"
 
 
+# Where to WRITE user data (never write into the .app)
+def write_dir(APP_NAME: str):
+    try:
+        # macOS Application Support path
+        from PyQt6.QtCore import QStandardPaths
+
+        base = (
+            Path(
+                QStandardPaths.writableLocation(
+                    QStandardPaths.StandardLocation.AppDataLocation
+                )
+            )
+            / APP_NAME
+        )
+        writable_dir = (
+            Path(base)
+            if base
+            else Path.home() / "Library" / "Application Support" / APP_NAME
+        )  # APP_NAME
+    except Exception:
+        writable_dir = (
+            Path.home() / "Library" / "Application Support" / APP_NAME
+        )  # APP_NAME
+    writable_dir.mkdir(parents=True, exist_ok=True)
+    return writable_dir
+
+
+RES_DIR: Path = (
+    Path(sys._MEIPASS)  # type: ignore
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent
+)
+BUNDLE_DIR: Path = (
+    Path(sys.executable).resolve().parents[2]
+    if getattr(sys, "frozen", False)
+    else RES_DIR
+)
+WRITE_DIR: Path = BUNDLE_DIR if RES_DIR == BUNDLE_DIR else write_dir(APP_NAME)
+
+relative_bundle_path = os.path.relpath(BUNDLE_DIR, Path.cwd())
+relative_resources_path = os.path.relpath(RES_DIR, Path.cwd())
+
+
 class Global_Vars:
     """
     Holds and persists application-wide paths and configuration.
@@ -113,12 +156,11 @@ class Global_Vars:
 
     def __init__(self, logger: StructuredLogger | None = None) -> None:
         self._saving_enabled: bool = False
+        log_path = WRITE_DIR / "Global_Vars.log"
         if logger:
             self.log = logger.getChildLogger(self.__class__.__name__)
         else:
-            self.log = StructuredLogger(
-                __name__, log_file="CaseBriefs.log", level="Trace"
-            )
+            self.log = StructuredLogger(__name__, log_file=str(log_path), level="Trace")
         self.log.info("Initialized logger for %s", self.__class__.__name__)
         self.res_dir, self.bundle_dir, self.write_dir = self.app_dirs()
         self.tmp_dir = self.write_dir / "TMP"
