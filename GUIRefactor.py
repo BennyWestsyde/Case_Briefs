@@ -171,10 +171,9 @@ class RenderAllToPdfWorker(QObject):
                     f"Starting compilation of {len(self._case_briefs.items)} case briefs."
                 )
             process = QProcess()
-            # run in the write_dir, same as before
-            process.setWorkingDirectory(str(self._global_vars.write_dir))
 
-            output_path = Path() / ".." / "TMP"
+            # Use a path relative to write_dir for output
+            output_path = Path("TMP")
 
             program = self._global_vars.tinitex_binary
             if not program.exists():
@@ -182,9 +181,10 @@ class RenderAllToPdfWorker(QObject):
                 return
 
             args = [
-                f"--output-dir={output_path}",
-                "--pdf-engine=pdflatex",
-                "--pdf-engine-opt=-shell-escape",
+                f"--outdir={output_path}",
+                "-Z",
+                "shell-escape",
+                "--reruns=2",
                 f"{self._global_vars.master_dst_tex}",
             ]
             process.setProgram(str(program))
@@ -218,7 +218,7 @@ class RenderAllToPdfWorker(QObject):
             # emit the path to the compiled PDF in TMP (same base name as master .tex)
 
             pdf_path = (
-                self._global_vars.tmp_dir
+                output_path.resolve()
                 / f"{self._global_vars.master_dst_tex.stem}.pdf"
             )
             if not pdf_path.exists():
@@ -1160,33 +1160,30 @@ class CaseBriefManager(QWidget):
         for i in range(
             self.content_layout.rowCount()
         ):  # pyright: ignore[reportUnknownArgumentType, reportAttributeAccessIssue, reportUnknownMemberType]
-            item: QLayoutItem = strict(
-                self.content_layout.itemAtPosition(i, 0)
-            )  # pyright: ignore[reportAssignmentType, reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
-            if item:
-                widget: QWidget = strict(
-                    item.widget()
-                )  # pyright: ignore[reportUnknownVariableType, reportAssignmentType, reportUnknownMemberType]
-                if isinstance(widget, QLabel):
-                    if (
-                        text.lower() in widget.text().lower()
-                        or text.lower() in widget.toolTip().lower()
-                    ):
-                        widget.show()
-                        strict(
-                            strict(self.content_layout.itemAtPosition(i, 1)).widget()
-                        ).show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the edit button as well
-                        strict(
-                            strict(self.content_layout.itemAtPosition(i, 2)).widget()
-                        ).show()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Show the view button as well
-                    else:
-                        widget.hide()
-                        strict(
-                            strict(self.content_layout.itemAtPosition(i, 1)).widget()
-                        ).hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the edit button as well
-                        strict(
-                            strict(self.content_layout.itemAtPosition(i, 2)).widget()
-                        ).hide()  # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType, reportAttributeAccessIssue] # Hide the view button as well
+            item = self.content_layout.itemAtPosition(i, 0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if not isinstance(widget, QLabel):
+                continue
+            matches = text.lower() in widget.text().lower() or text.lower() in widget.toolTip().lower()
+            # Column 1: edit button, Column 2: view button may be missing; guard None
+            edit_item = self.content_layout.itemAtPosition(i, 1)
+            view_item = self.content_layout.itemAtPosition(i, 2)
+            edit_widget = edit_item.widget() if edit_item else None
+            view_widget = view_item.widget() if view_item else None
+            if matches:
+                widget.show()
+                if edit_widget:
+                    edit_widget.show()
+                if view_widget:
+                    view_widget.show()
+            else:
+                widget.hide()
+                if edit_widget:
+                    edit_widget.hide()
+                if view_widget:
+                    view_widget.hide()
 
     @pyqtSlot(str)
     def edit_case_brief(self, case_brief: CaseBriefData):
@@ -1284,9 +1281,9 @@ class CaseBriefManager(QWidget):
         case_brief.reasoning = reasoning
         case_brief.opinions = opinions
         case_brief.notes = notes
-        self.case_briefs.catalog.repo.save(case_brief)
-        self.case_briefs.catalog.render_to_tex(case_brief)
+        # Save once via catalog and render to tex
         self.case_briefs.catalog.save(case_brief)
+        self.case_briefs.catalog.render_to_tex(case_brief)
         QMessageBox.information(
             self, "Success", f"Case brief '{case_brief.title}' created successfully!"
         )
@@ -1435,7 +1432,7 @@ class SettingsWindow(QWidget):
         )
         if selected_dir and selected_dir != current_path and selected_dir != Path():
             self.backup_location.setText(f"{selected_dir}")
-            self.global_vars.tmp_dir = Path(selected_dir)
+            # self.global_vars.tmp_dir = Path(selected_dir).parent
             self.log.debug(f"Set restore location to {selected_dir}")
         else:
             self.backup_location.setText(f"{current_path}")
@@ -1460,6 +1457,9 @@ class SettingsWindow(QWidget):
         backup_path = Path(self.backup_location.text())
         self.case_briefs.catalog.repo.restore_db_file(backup_path)
         self.case_briefs.reload_from_sql()
+        # Save all case briefs to .tex files
+        for cb in self.case_briefs.items:
+            self.case_briefs.catalog.render_to_tex(cb)
         self.log.info(f"Cases restored from {backup_path}")
         # Popup a confirmation
         QMessageBox.information(

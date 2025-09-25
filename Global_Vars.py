@@ -1,9 +1,10 @@
-from cleanup import StructuredLogger
+from logger import StructuredLogger
 
 
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 from types import MethodType
 from typing import Any
@@ -78,11 +79,22 @@ class Global_Vars:
         ~/Library/Application Support/<APP_NAME>.
     - The `tinitex` binary path is chosen per-platform (.exe on Windows).
 
+    Path Architecture:
+    - cases_dir: Directory where individual case .tex files are stored
+    - cases_output_dir: Directory where compiled PDFs are saved
+    - tex_src_dir: Directory where LaTeX template and style files are stored (read-only)
+    - master_src_tex: Path to the master LaTeX template file (CaseBriefs.tex)
+    - master_src_sty: Path to the LaTeX style file (lawbrief.sty)
+    - sql_src_dir: Directory where SQL-related files are stored
+    - sql_src_file: Path to the SQLite database file
+    - sql_create: Path to the SQL schema creation script
+    - tinitex_binary: Path to the tinitex binary for LaTeX compilation
+
     Attributes:
     - self.log: StructuredLogger
-            Structured self.logger used for debug/info/warn messages.
+            Structured logger used for debug/info/warn messages.
     - res_dir: pathlib.Path
-            Directory containing read-only application resources (e.g., templates, SQL).
+            Directory containing read-only application resources (templates, SQL, binaries).
     - bundle_dir: pathlib.Path
             Top-level bundle directory (e.g., .../CaseBriefs.app/Contents) or project
             root during development.
@@ -91,21 +103,21 @@ class Global_Vars:
     - tmp_dir: pathlib.Path
             Temporary working directory under write_dir (default: write_dir/TMP).
     - cases_dir: pathlib.Path
-            Root directory for case input files (default: write_dir/Cases).
+            Directory where individual case .tex files are stored (default: write_dir/Cases).
     - cases_output_dir: pathlib.Path
-            Output directory for processed case artifacts (default: write_dir/Cases/Output).
+            Directory where compiled PDFs are saved (default: write_dir/Cases/Output).
     - tex_src_dir: pathlib.Path
-            Read-only LaTeX source directory bundled with the app (default: res_dir/tex_src).
+            Read-only LaTeX template directory (default: res_dir/tex_src).
     - tex_dst_dir: pathlib.Path
-            Writable LaTeX working directory (default: write_dir/tex_src).
+            Writable LaTeX template directory (default: write_dir/tex_src).
     - master_src_tex: pathlib.Path
-            Path to the master LaTeX source file in tex_src_dir (CaseBriefs.tex).
+            Path to the master LaTeX template file in tex_src_dir (CaseBriefs.tex).
     - master_src_sty: pathlib.Path
-            Path to the style file in tex_src_dir (lawbrief.sty).
+            Path to the LaTeX style file in tex_src_dir (lawbrief.sty).
     - master_dst_tex: pathlib.Path
-            Writable copy of the master LaTeX file in tex_dst_dir.
+            Writable path to the master LaTeX template file (CaseBriefs.tex).
     - master_dst_sty: pathlib.Path
-            Writable copy of the style file in tex_dst_dir.
+            Writable path to the LaTeX style file (lawbrief.sty).
     - sql_src_dir: pathlib.Path
             Read-only SQL resource directory (default: res_dir/SQL).
     - sql_dst_dir: pathlib.Path
@@ -124,7 +136,7 @@ class Global_Vars:
     Methods:
     - app_dirs() -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]
             Resolve (resources_dir, bundle_dir, writable_dir). Creates the writable
-            directory if needed and self.logs its decisions.
+            directory if needed and logs its decisions.
     - load_from_json() -> dict[str, pathlib.Path] | None
             Load previously saved attributes from write_dir/global_vars.json. Returns a
             mapping of attribute names to Path values, or None if not found. Internal
@@ -132,15 +144,12 @@ class Global_Vars:
     - save_to_json() -> None
             Persist current public attributes to write_dir/global_vars.json. Paths are
             serialized as strings. May raise I/O errors if the file cannot be written.
-    - _setattr_(name: str, value: Any) -> None
-            Replacement for __setattr__ that self.logs the change, sets the attribute, and
-            immediately saves the updated state to JSON.
 
     Side effects:
     - Creates required directories (write_dir, tmp_dir, cases_dir, cases_output_dir,
         tex_src_dir, tex_dst_dir, sql_src_dir, sql_dst_dir, backup_location).
     - Reads/writes write_dir/global_vars.json during load/save.
-    - Emits self.log messages describing decisions and file operations.
+    - Emits log messages describing decisions and file operations.
 
     Raises:
     - OSError / IOError from directory creation or JSON file writes/reads.
@@ -156,44 +165,61 @@ class Global_Vars:
 
     def __init__(self, logger: StructuredLogger | None = None) -> None:
         self._saving_enabled: bool = False
+        self._save_lock = threading.Lock()  # Thread safety for JSON operations
+        self._last_save_hash: str = ""  # Prevent unnecessary saves
+
         log_path = WRITE_DIR / "Global_Vars.log"
         if logger:
             self.log = logger.getChildLogger(self.__class__.__name__)
         else:
             self.log = StructuredLogger(__name__, log_file=str(log_path), level="Trace")
         self.log.info("Initialized logger for %s", self.__class__.__name__)
+
         self.res_dir, self.bundle_dir, self.write_dir = self.app_dirs()
         self.tmp_dir = self.write_dir / "TMP"
+
+        # Directory where individual case .tex files are stored
         self.cases_dir = self.write_dir / "Cases"
+
+        # Directory where compiled PDFs are saved
         self.cases_output_dir = self.write_dir / "Cases" / "Output"
+
+        # Directory where LaTeX template and style files are stored (read-only resources)
         self.tex_src_dir = self.res_dir / "tex_src"
+        # Writable destination directory for LaTeX templates/styles (separate from resources)
         self.tex_dst_dir = self.write_dir / "tex_src"
+
+        # Paths to the actual template and style files
         self.master_src_tex = self.tex_src_dir / "CaseBriefs.tex"
         self.master_src_sty = self.tex_src_dir / "lawbrief.sty"
+        # Writable destination copies of templates/styles
         self.master_dst_tex = self.tex_dst_dir / "CaseBriefs.tex"
         self.master_dst_sty = self.tex_dst_dir / "lawbrief.sty"
+
+        # SQL-related paths
         self.sql_src_dir = self.res_dir / "SQL"
         self.sql_dst_dir = self.write_dir / "SQL"
         self.sql_src_file = self.sql_src_dir / "Cases.sqlite"
         self.sql_dst_file = self.sql_dst_dir / "Cases.sqlite"
         self.sql_create = self.sql_src_dir / "Create_DB.sql"
+
         self.backup_location: Path = self.write_dir / "Backup"
         self.tinitex_binary: Path = (
-            self.res_dir / "bin" / "tinitex"
+            self.res_dir / "bin" / "tectonic"
             if os.name != "nt"
             else self.res_dir / "bin" / "tinitex.exe"
         )
+
         results: dict[str, Path] | None = self.load_from_json()
         if results:
             self.log.info("Loaded global variables from JSON")
+            # Apply loaded values
             self.res_dir = results.get("res_dir", self.res_dir)
             self.bundle_dir = results.get("bundle_dir", self.bundle_dir)
             self.write_dir = results.get("write_dir", self.write_dir)
             self.tmp_dir = results.get("tmp_dir", self.tmp_dir)
             self.cases_dir = results.get("cases_dir", self.cases_dir)
-            self.cases_output_dir = results.get(
-                "cases_output_dir", self.cases_output_dir
-            )
+            self.cases_output_dir = results.get("cases_output_dir", self.cases_output_dir)
             self.tex_src_dir = results.get("tex_src_dir", self.tex_src_dir)
             self.tex_dst_dir = results.get("tex_dst_dir", self.tex_dst_dir)
             self.master_src_tex = results.get("master_src_tex", self.master_src_tex)
@@ -206,6 +232,7 @@ class Global_Vars:
             self.sql_dst_file = results.get("sql_dst_file", self.sql_dst_file)
             self.sql_create = results.get("sql_create", self.sql_create)
             self.backup_location = results.get("backup_location", self.backup_location)
+
         for d in (
             self.write_dir,
             self.tmp_dir,
@@ -218,6 +245,7 @@ class Global_Vars:
             self.backup_location,
         ):
             Path(d).mkdir(parents=True, exist_ok=True)
+
         self._saving_enabled = True
         self.save_to_json()
 
@@ -235,13 +263,40 @@ class Global_Vars:
             except Exception:
                 pass
         super().__setattr__(name, value)
-        if name == "log":
+        if name == "log" or name.startswith("_"):
             return
-        if self._saving_enabled:
+        # Only save if saving is enabled and we have the lock mechanism
+        if hasattr(self, '_saving_enabled') and self._saving_enabled:
             try:
-                self.save_to_json()
+                # Use a separate thread to avoid blocking
+                threading.Thread(target=self._async_save, daemon=True).start()
             except Exception:
                 pass
+
+    def _async_save(self):
+        """Asynchronous save with deduplication to prevent excessive I/O"""
+        try:
+            current_hash = self._compute_state_hash()
+            if current_hash != self._last_save_hash:
+                with self._save_lock:
+                    # Double-check after acquiring lock
+                    if current_hash != self._last_save_hash:
+                        self.save_to_json()
+                        self._last_save_hash = current_hash
+        except Exception:
+            pass
+
+    def _compute_state_hash(self) -> str:
+        """Compute a hash of the current state to detect changes"""
+        import hashlib
+        state_data = {}
+        for key, value in self.__dict__.items():
+            if not key.startswith("_") and not key == "log":
+                if isinstance(value, Path):
+                    state_data[key] = str(value)
+                else:
+                    state_data[key] = str(value)
+        return hashlib.md5(json.dumps(state_data, sort_keys=True).encode()).hexdigest()
 
     def app_dirs(self):
         # Where to READ bundled resources (inside .app or onefile temp)

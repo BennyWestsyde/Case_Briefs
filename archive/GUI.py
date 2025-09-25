@@ -128,9 +128,8 @@ class RenderAllToPdfWorker(QObject):
                 return
 
             args = [
-                f"--output-dir={output_path}",
-                "--pdf-engine=pdflatex",
-                "--pdf-engine-opt=-shell-escape",
+                f"--outdir={output_path}",
+                "-Z","shell-escape",
                 f"{self._case_briefs.global_vars.master_dst_tex}",
             ]
             process.setProgram(str(program))

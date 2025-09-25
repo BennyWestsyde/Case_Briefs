@@ -26,13 +26,22 @@ class QProcessTeXCompiler:
             self.log.error("TeX engine not found: %s", engine)
             return None
 
+        self.log.info("Compiling %s with %s", tex_file, engine)
+        self.log.debug(
+            "Running Command: %s --output-dir=%s --pdf-engine-opt=-shell-escape %s",
+            engine,
+            outdir.relative_to(workdir),
+            tex_file.relative_to(workdir),
+        )
+
         proc = QProcess()
         proc.setWorkingDirectory(str(workdir))
         proc.setProgram(str(engine))
         proc.setArguments(
             [
-                f"--output-dir={outdir.relative_to(workdir)}",
-                "--pdf-engine-opt=-shell-escape",
+                f"--outdir={outdir.relative_to(workdir)}",
+                "-Z",
+                "shell-escape",
                 # "--pdf-engine-opt=-interaction=nonstopmode",
                 f"{tex_file.relative_to(workdir)}",
             ]

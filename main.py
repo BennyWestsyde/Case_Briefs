@@ -49,7 +49,11 @@ if __name__ == "__main__":
     sqlite_repo = SQLiteCaseBriefRepository(
         global_vars.sql_dst_file, global_vars.sql_create, logger
     )
-    regex_latex_codec = RegexLatexCodec()
+    # Ensure database schema exists before any queries
+    sqlite_repo.ensure_db()
+
+    # Fix: Initialize RegexLatexCodec with master tex path to prevent hardcoded path issues
+    regex_latex_codec = RegexLatexCodec(master_tex_path=global_vars.master_src_tex)
     qprocess_tex_compiler = QProcessTeXCompiler(logger)
     catalog = CaseCatalog(
         sqlite_repo,

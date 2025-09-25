@@ -26,6 +26,12 @@ class CaseCatalog:
         self.workdir = global_vars.tmp_dir
         self.casesdir = global_vars.cases_dir
         self.outdir = global_vars.cases_output_dir
+
+        # Set the master tex path in the codec to enable dynamic path resolution
+        if hasattr(self.codec, 'master_tex_path'):
+            # Prefer the writable destination copy of the master file
+            self.codec.master_tex_path = global_vars.master_dst_tex
+
         self.log = logger.getChildLogger("CaseCatalog")
 
     # citation resolver via the repo (adaptor)
@@ -47,8 +53,14 @@ class CaseCatalog:
         return self.repo.get(label)
 
     def render_to_tex(self, brief: CaseBriefData) -> Path:
-        tex = self.codec.to_tex(brief, cite=self._Citer(self.repo))
         tex_file = self.casesdir / f"{brief.filename}.tex"
+
+        # Fix: Pass the output file path to enable dynamic path resolution
+        if hasattr(self.codec, '_get_master_tex_reference'):
+            tex = self.codec.to_tex(brief, cite=self._Citer(self.repo), output_file_path=tex_file)
+        else:
+            tex = self.codec.to_tex(brief, cite=self._Citer(self.repo))
+
         tex_file.write_text(tex, encoding="utf-8")
         return tex_file
 
@@ -76,7 +88,8 @@ if __name__ == "__main__":
     sqlite_repo = SQLiteCaseBriefRepository(
         global_vars.sql_dst_file, global_vars.sql_create, logger
     )
-    regex_latex_codec = RegexLatexCodec()
+    # Fix: Initialize RegexLatexCodec with master tex path
+    regex_latex_codec = RegexLatexCodec(master_tex_path=global_vars.master_src_tex)
     qprocess_tex_compiler = QProcessTeXCompiler(logger)
     catalog = CaseCatalog(
         sqlite_repo,
